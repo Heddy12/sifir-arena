@@ -308,23 +308,23 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 
 /* ==================== CHARACTERS (ICE GIRL / FIRE BOY) ==================== */
 #warriors-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
-.character{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;width:160px;}
-.character.ice-girl{left:8%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
-.character.fire-boy{right:8%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
+.character{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;width:190px;}
+.character.ice-girl{left:6%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
+.character.fire-boy{right:6%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
 @keyframes charFloatIce{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
 @keyframes charFloatFire{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
-.char-aura{position:absolute;top:50%;left:50%;width:220px;height:220px;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;filter:blur(22px);opacity:0.6;}
+.char-aura{position:absolute;top:50%;left:50%;width:280px;height:280px;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;filter:blur(26px);opacity:0.75;}
 .char-aura.ice{background:radial-gradient(circle,rgba(0,240,255,0.55) 0%,rgba(0,240,255,0.12) 40%,transparent 70%);animation:iceShimmer 3s ease-in-out infinite alternate;}
 .char-aura.fire{background:radial-gradient(circle,rgba(255,107,0,0.55) 0%,rgba(255,46,99,0.18) 40%,transparent 70%);animation:fireFlicker 0.4s ease-in-out infinite alternate;}
 @keyframes iceShimmer{from{opacity:0.4;transform:translate(-50%,-50%) scale(0.95);}to{opacity:0.7;transform:translate(-50%,-50%) scale(1.05);}}
 @keyframes fireFlicker{from{opacity:0.45;transform:translate(-50%,-50%) scale(0.92) rotate(-3deg);}to{opacity:0.72;transform:translate(-50%,-50%) scale(1.08) rotate(3deg);}}
-.char-img{width:160px;height:auto;max-height:250px;position:relative;z-index:1;filter:drop-shadow(0 0 12px rgba(0,0,0,0.6));}
-.char-emoji{font-size:4.5rem;line-height:1;position:relative;z-index:1;filter:drop-shadow(0 0 15px currentColor);display:none;align-items:center;justify-content:center;}
+.char-img{width:190px;height:auto;max-height:290px;position:relative;z-index:1;filter:drop-shadow(0 0 14px rgba(0,0,0,0.6));}
+.char-emoji{font-size:5.5rem;line-height:1;position:relative;z-index:1;filter:drop-shadow(0 0 15px currentColor);display:none;align-items:center;justify-content:center;}
 .character.ice-girl .char-emoji{color:var(--neon-cyan);}
 .character.fire-boy .char-emoji{color:var(--neon-orange);}
 .held-cards{display:flex;gap:6px;margin-top:12px;z-index:2;position:relative;}
-.held-number{width:56px;height:42px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;background:var(--bg-card-2);border:2px solid var(--neon-yellow);color:var(--neon-yellow);box-shadow:0 0 10px rgba(255,230,0,0.3);}
-.held-magic{width:42px;height:42px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:bold;text-transform:uppercase;background:rgba(19,19,31,0.85);border:2px solid var(--neon-red);color:var(--neon-red);box-shadow:0 0 10px rgba(255,46,99,0.3);}
+.held-number{width:62px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:bold;background:var(--bg-card-2);border:2px solid var(--neon-yellow);color:var(--neon-yellow);box-shadow:0 0 12px rgba(255,230,0,0.35);}
+.held-magic{width:46px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:bold;text-transform:uppercase;background:rgba(19,19,31,0.85);border:2px solid var(--neon-red);color:var(--neon-red);box-shadow:0 0 12px rgba(255,46,99,0.35);}
 .char-label{font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;margin-top:10px;color:var(--text-dim);}
 .character.ice-girl .char-label{color:var(--neon-cyan);}
 .character.fire-boy .char-label{color:var(--neon-orange);}
@@ -367,11 +367,11 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 
 /* ==================== BACKGROUND RESPONSIVE ==================== */
 @media(max-width:768px){
-  .character{width:110px;}
-  .char-img{width:110px;max-height:160px;}
-  .char-emoji{font-size:3rem;}
-  .character.ice-girl{left:3%;}
-  .character.fire-boy{right:3%;}
+  .character{width:120px;}
+  .char-img{width:120px;max-height:175px;}
+  .char-emoji{font-size:3.5rem;}
+  .character.ice-girl{left:2%;}
+  .character.fire-boy{right:2%;}
   #vs-lightning{font-size:2.5rem;}
 }
 </style>
