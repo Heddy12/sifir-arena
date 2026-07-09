@@ -339,7 +339,21 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .mode-btn.active{border-color:var(--neon-cyan);color:var(--neon-cyan);box-shadow:var(--glow-cyan);background:linear-gradient(135deg,rgba(0,240,255,0.12),rgba(0,128,255,0.06));}
 .mode-btn.active.ffa{border-color:var(--neon-red);color:var(--neon-red);box-shadow:var(--glow-red);background:linear-gradient(135deg,rgba(255,46,99,0.12),rgba(255,46,99,0.06));}
 .mode-btn.active.tower{border-color:var(--neon-purple);color:var(--neon-purple);box-shadow:0 0 10px rgba(160,32,240,0.5);background:linear-gradient(135deg,rgba(160,32,240,0.12),rgba(160,32,240,0.06));}
+.mode-btn.active.solo{border-color:var(--neon-green);color:var(--neon-green);box-shadow:var(--glow-green);background:linear-gradient(135deg,rgba(0,255,136,0.12),rgba(0,200,50,0.06));}
 .mode-desc{font-size:0.65rem;color:var(--text-dim);text-align:center;margin-bottom:16px;min-height:16px;letter-spacing:0.5px;}
+
+/* ==================== ENHANCED MAGIC EFFECTS ==================== */
+.magic-rune{position:absolute;pointer-events:none;font-size:1.4rem;font-weight:bold;opacity:0;animation:runeOrbit linear infinite;text-shadow:0 0 20px currentColor,0 0 40px currentColor;z-index:0;}
+@keyframes runeOrbit{0%{transform:translate(-50%,-50%) rotate(0deg) translateX(var(--orbit-radius)) rotate(0deg);opacity:0;}10%{opacity:0.7;}90%{opacity:0.5;}100%{transform:translate(-50%,-50%) rotate(360deg) translateX(var(--orbit-radius)) rotate(-360deg);opacity:0;}}
+#power-aura{position:fixed;top:-20%;left:-20%;width:140%;height:140%;z-index:-1;pointer-events:none;background:conic-gradient(from 0deg,transparent,rgba(0,240,255,0.04),transparent,rgba(160,32,240,0.04),transparent,rgba(255,46,99,0.04),transparent);animation:auraSpin 20s linear infinite;border-radius:50%;filter:blur(60px);}
+@keyframes auraSpin{from{transform:rotate(0deg) scale(1);}to{transform:rotate(360deg) scale(1);}}
+#screen-flash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;pointer-events:none;opacity:0;transition:opacity 0.05s;}
+#screen-flash.active{opacity:0.3;background:white;}
+.energy-beam{position:absolute;height:3px;background:linear-gradient(90deg,transparent,var(--neon-cyan),var(--neon-yellow),var(--neon-red),transparent);box-shadow:0 0 20px var(--neon-yellow),0 0 40px var(--neon-cyan);opacity:0;animation:beamPulse 2s ease-in-out infinite;z-index:1;border-radius:2px;}
+@keyframes beamPulse{0%,100%{opacity:0;transform:scaleX(0.5);}25%{opacity:0.6;transform:scaleX(1);}50%{opacity:0.8;transform:scaleX(1.1);}75%{opacity:0.4;transform:scaleX(0.8);}}
+.btn-solo-start{background:linear-gradient(135deg,var(--neon-green),#00cc66);color:#000;box-shadow:var(--glow-green);}
+.btn-solo-start:hover{filter:brightness(1.2);transform:translateY(-1px);}
+.solo-high-score{font-size:0.65rem;color:var(--neon-yellow);text-align:center;margin-top:8px;letter-spacing:1px;}
 
 /* ==================== BACKGROUND RESPONSIVE ==================== */
 @media(max-width:768px){
@@ -366,8 +380,10 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 
 <!-- ANIMATED BACKGROUND LAYER -->
 <div id="bg-layer">
+  <div id="power-aura"></div>
   <canvas id="particle-canvas"></canvas>
 </div>
+<div id="screen-flash"></div>
 
 <!-- NUMBER WARRIORS -->
 <div id="warriors-bg">
@@ -376,6 +392,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
     <div class="warrior-label">HERO</div>
     <div class="warrior-hp" id="warrior-hero-hp">HP 100</div>
   </div>
+  <div class="energy-beam" id="energy-beam"></div>
   <div id="vs-lightning">⚡</div>
   <div class="warrior tower" id="warrior-tower">
     <div class="warrior-box" id="warrior-tower-box">56</div>
@@ -405,6 +422,11 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
           <span class="mode-icon">🏰</span>
           Tower Battle
           <span class="mode-label">vs CPU Tower</span>
+        </button>
+        <button class="mode-btn solo" data-mode="solo">
+          <span class="mode-icon">⚔</span>
+          Solo Quest
+          <span class="mode-label">vs Sifir Tower</span>
         </button>
       </div>
       <div class="mode-desc" id="mode-desc">Fight against other players. Last one standing wins!</div>
@@ -442,8 +464,10 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
       </div>
     </div>
     <button class="connect-btn btn-create" id="btn-create">⚔ Create Room</button>
+    <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
+    <div class="solo-high-score" id="solo-high-score"></div>
     <div class="connect-divider"></div>
-    <div class="connect-section">
+    <div class="connect-section" id="join-section">
       <div class="connect-label">Join with Room Code</div>
       <input type="text" class="connect-input" id="join-code" placeholder="Enter room code" maxlength="6" style="text-transform:uppercase;">
     </div>
@@ -630,8 +654,10 @@ var Sound = {
 function initBackground() {
   initFloatingNumbers();
   initParticles();
+  initMagicRunes();
+  initLightningStrikes();
+  initEnergyBeam();
   updateWarriorDisplay('ffa');
-  // Periodically change warrior numbers
   setInterval(function () {
     if (document.getElementById('warriors-bg').style.display !== 'none') {
       updateWarriorDisplay(STATE.gameMode);
@@ -675,12 +701,31 @@ function initParticles() {
   window.addEventListener('resize', resize);
   resize();
   var particles = [];
+  // Ambient particles (floating dots)
   for (var i = 0; i < 40; i++) {
     particles.push({
       x: Math.random() * W, y: Math.random() * H,
       vx: (Math.random() - 0.5) * 0.4, vy: -0.2 - Math.random() * 0.6,
-      size: 1 + Math.random() * 2.5, life: 1,
+      size: 1 + Math.random() * 2.5, life: 1, type: 'ambient',
       color: ['rgba(0,240,255','rgba(255,46,99','rgba(160,32,240','rgba(0,255,136','rgba(255,230,0'][Math.floor(Math.random() * 5)]
+    });
+  }
+  // Fire embers (rise from bottom, red/orange)
+  for (var i = 0; i < 25; i++) {
+    particles.push({
+      x: Math.random() * W, y: H + Math.random() * 50,
+      vx: (Math.random() - 0.5) * 0.6, vy: -0.4 - Math.random() * 0.8,
+      size: 1.5 + Math.random() * 2.5, life: 0.5 + Math.random() * 0.5, type: 'fire',
+      color: ['rgba(255,46,99','rgba(255,107,0','rgba(255,200,0','rgba(255,80,40'][Math.floor(Math.random() * 4)]
+    });
+  }
+  // Ice crystals (fall from top, cyan/white, diamond shape)
+  for (var i = 0; i < 15; i++) {
+    particles.push({
+      x: Math.random() * W, y: -Math.random() * H * 0.5,
+      vx: (Math.random() - 0.5) * 0.2, vy: 0.15 + Math.random() * 0.3,
+      size: 2 + Math.random() * 3, life: 0.7 + Math.random() * 0.3, type: 'ice',
+      color: ['rgba(0,240,255','rgba(200,240,255','rgba(255,255,255','rgba(0,200,255'][Math.floor(Math.random() * 4)]
     });
   }
   function animate() {
@@ -688,24 +733,199 @@ function initParticles() {
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
       p.x += p.vx; p.y += p.vy;
-      p.life -= 0.002;
-      if (p.life <= 0 || p.y < -10 || p.x < -10 || p.x > W + 10) {
-        particles[i] = {
-          x: Math.random() * W, y: H + 10,
-          vx: (Math.random() - 0.5) * 0.4, vy: -0.2 - Math.random() * 0.6,
-          size: 1 + Math.random() * 2.5, life: 1,
-          color: ['rgba(0,240,255','rgba(255,46,99','rgba(160,32,240','rgba(0,255,136','rgba(255,230,0'][Math.floor(Math.random() * 5)]
-        };
+      p.life -= 0.003;
+      if (p.life <= 0 || p.y < -20 || p.y > H + 20 || p.x < -20 || p.x > W + 20) {
+        if (p.type === 'fire') {
+          particles[i] = { x: Math.random() * W, y: H + 10, vx: (Math.random() - 0.5) * 0.6, vy: -0.4 - Math.random() * 0.8, size: 1.5 + Math.random() * 2.5, life: 0.5 + Math.random() * 0.5, type: 'fire', color: ['rgba(255,46,99','rgba(255,107,0','rgba(255,200,0','rgba(255,80,40'][Math.floor(Math.random() * 4)] };
+        } else if (p.type === 'ice') {
+          particles[i] = { x: Math.random() * W, y: -10, vx: (Math.random() - 0.5) * 0.2, vy: 0.15 + Math.random() * 0.3, size: 2 + Math.random() * 3, life: 0.7 + Math.random() * 0.3, type: 'ice', color: ['rgba(0,240,255','rgba(200,240,255','rgba(255,255,255','rgba(0,200,255'][Math.floor(Math.random() * 4)] };
+        } else {
+          particles[i] = { x: Math.random() * W, y: H + 10, vx: (Math.random() - 0.5) * 0.4, vy: -0.2 - Math.random() * 0.6, size: 1 + Math.random() * 2.5, life: 1, type: 'ambient', color: ['rgba(0,240,255','rgba(255,46,99','rgba(160,32,240','rgba(0,255,136','rgba(255,230,0'][Math.floor(Math.random() * 5)] };
+        }
         p = particles[i];
       }
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = p.color + ',' + (p.life * 0.5) + ')';
-      ctx.fill();
+      if (p.type === 'ice') {
+        // Draw diamond shape for ice crystals
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Date.now() * 0.001 + i);
+        ctx.beginPath();
+        ctx.moveTo(0, -p.size);
+        ctx.lineTo(p.size * 0.6, 0);
+        ctx.lineTo(0, p.size);
+        ctx.lineTo(-p.size * 0.6, 0);
+        ctx.closePath();
+        ctx.fillStyle = p.color + ',' + (p.life * 0.6) + ')';
+        ctx.fill();
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = p.color + ',0.5)';
+        ctx.strokeStyle = p.color + ',' + (p.life * 0.8) + ')';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        var alpha = p.life * (p.type === 'fire' ? 0.7 : 0.5);
+        ctx.fillStyle = p.color + ',' + alpha + ')';
+        ctx.fill();
+        if (p.type === 'fire') {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = p.color + ',0.8)';
+        }
+      }
+      ctx.shadowBlur = 0;
     }
+    drawLightning(ctx);
     requestAnimationFrame(animate);
   }
   animate();
+}
+
+function initMagicRunes() {
+  var bg = document.getElementById('bg-layer');
+  var runes = ['ᚠ','ᚢ','ᚦ','ᚨ','ᚱ','ᚲ','ᚷ','ᚹ','ᚺ','ᛁ','ᛃ','ᛇ','ᛈ','ᛉ','ᛊ','ᛏ','ᛒ','ᛖ','ᛗ','ᛚ'];
+  var colors = ['var(--neon-cyan)','var(--neon-green)','var(--neon-red)','var(--neon-yellow)','var(--neon-purple)','var(--neon-orange)'];
+  for (var i = 0; i < 8; i++) {
+    var el = document.createElement('div');
+    el.className = 'magic-rune';
+    el.textContent = runes[Math.floor(Math.random() * runes.length)];
+    var radius = 140 + Math.random() * 80;
+    el.style.setProperty('--orbit-radius', radius + 'px');
+    el.style.left = '50%';
+    el.style.top = '50%';
+    el.style.color = colors[Math.floor(Math.random() * colors.length)];
+    var duration = 10 + Math.random() * 15;
+    el.style.animationDuration = duration + 's';
+    el.style.animationDelay = (Math.random() * 5) + 's';
+    el.style.fontSize = (1.0 + Math.random() * 0.8) + 'rem';
+    bg.appendChild(el);
+  }
+}
+
+// Lightning state
+var lightningState = { strikes: [] };
+
+function initLightningStrikes() {
+  scheduleLightning();
+}
+
+function scheduleLightning() {
+  var delay = 3000 + Math.random() * 5000;
+  setTimeout(function () {
+    if (document.getElementById('bg-layer').style.display !== 'none') {
+      triggerLightning();
+    }
+    scheduleLightning();
+  }, delay);
+}
+
+function triggerLightning() {
+  var canvas = document.getElementById('particle-canvas');
+  if (!canvas) return;
+  var w = canvas.width, h = canvas.height;
+  var startX = 100 + Math.random() * (w - 200);
+  var bolt = [];
+  var x = startX, y = 0;
+  var segments = 12 + Math.floor(Math.random() * 8);
+  for (var i = 0; i < segments; i++) {
+    x += (Math.random() - 0.5) * 60;
+    y += h / segments + (Math.random() - 0.5) * 20;
+    bolt.push({ x: x, y: y });
+  }
+  // Branch bolts
+  var branches = [];
+  for (var i = 0; i < 3; i++) {
+    var branchIdx = Math.floor(Math.random() * (segments - 3)) + 2;
+    var bx = bolt[branchIdx].x, by = bolt[branchIdx].y;
+    var bendX = bx + (Math.random() - 0.5) * 80;
+    var bendY = by + 40 + Math.random() * 60;
+    branches.push({ start: bolt[branchIdx], mid: { x: bendX, y: bendY }, end: { x: bendX + (Math.random() - 0.5) * 40, y: bendY + 20 + Math.random() * 30 } });
+  }
+  lightningState.strikes.push({ bolt: bolt, branches: branches, life: 1 });
+
+  // Screen flash
+  var flash = document.getElementById('screen-flash');
+  if (flash) {
+    flash.classList.add('active');
+    setTimeout(function () { flash.classList.remove('active'); }, 60);
+  }
+}
+
+function drawLightning(ctx) {
+  for (var s = 0; s < lightningState.strikes.length; s++) {
+    var strike = lightningState.strikes[s];
+    strike.life -= 0.03;
+    if (strike.life <= 0) continue;
+
+    ctx.save();
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = 'rgba(255,230,0,0.8)';
+    ctx.strokeStyle = 'rgba(255,255,255,' + strike.life + ')';
+    ctx.lineWidth = 2 + strike.life * 3;
+    ctx.beginPath();
+    ctx.moveTo(strike.bolt[0].x, strike.bolt[0].y);
+    for (var i = 1; i < strike.bolt.length; i++) {
+      ctx.lineTo(strike.bolt[i].x, strike.bolt[i].y);
+    }
+    ctx.stroke();
+
+    // Inner bright core
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(200,230,255,' + (strike.life * 0.8) + ')';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(strike.bolt[0].x, strike.bolt[0].y);
+    for (var i = 1; i < strike.bolt.length; i++) {
+      ctx.lineTo(strike.bolt[i].x, strike.bolt[i].y);
+    }
+    ctx.stroke();
+
+    // Branches
+    for (var b = 0; b < strike.branches.length; b++) {
+      var br = strike.branches[b];
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(255,230,0,0.6)';
+      ctx.strokeStyle = 'rgba(255,255,255,' + (strike.life * 0.7) + ')';
+      ctx.lineWidth = 1 + strike.life * 2;
+      ctx.beginPath();
+      ctx.moveTo(br.start.x, br.start.y);
+      ctx.lineTo(br.mid.x, br.mid.y);
+      ctx.lineTo(br.end.x, br.end.y);
+      ctx.stroke();
+    }
+
+    // Glow at strike point
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = 'rgba(255,230,0,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,' + (strike.life * 0.3) + ')';
+    ctx.beginPath();
+    ctx.arc(strike.bolt[0].x, strike.bolt[0].y, 5 + strike.life * 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+  // Cleanup dead strikes
+  lightningState.strikes = lightningState.strikes.filter(function (s) { return s.life > 0; });
+}
+
+function initEnergyBeam() {
+  var beam = document.getElementById('energy-beam');
+  if (!beam) return;
+  function positionBeam() {
+    var hero = document.getElementById('warrior-hero');
+    var tower = document.getElementById('warrior-tower');
+    var vLightning = document.getElementById('vs-lightning');
+    if (hero && tower && vLightning) {
+      beam.style.position = 'absolute';
+      beam.style.top = '50%';
+      beam.style.left = '25%';
+      beam.style.width = '50%';
+      beam.style.transform = 'translateY(-50%)';
+    }
+  }
+  positionBeam();
+  window.addEventListener('resize', positionBeam);
 }
 
 function updateWarriorDisplay(mode) {
@@ -713,7 +933,7 @@ function updateWarriorDisplay(mode) {
   var towerBox = document.getElementById('warrior-tower-box');
   var heroHp = document.getElementById('warrior-hero-hp');
   var towerHp = document.getElementById('warrior-tower-hp');
-  if (mode === 'tower') {
+  if (mode === 'tower' || mode === 'solo') {
     heroBox.textContent = '3×4';
     towerBox.textContent = '12';
     heroHp.textContent = 'HP 100';
@@ -728,10 +948,306 @@ function updateWarriorDisplay(mode) {
   }
 }
 
+/* ==================== SINGLE PLAYER MODE (SOLO QUEST) ==================== */
+function startSoloGame() {
+  var settings = STATE.settings;
+  var playerCards = dealCards();
+
+  STATE.you = 0;
+  STATE.battleActive = true;
+  STATE.round = 0;
+  STATE.currentPlayer = 0;
+  STATE.currentQuestion = null;
+  STATE.weakQuestions = [];
+  STATE.players = [
+    { name: document.getElementById('player-name').value.trim() || 'Hero', hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: playerCards, activeEffects: {} },
+    { name: 'Sifir Tower', hp: 200, maxHP: 200, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} }
+  ];
+  STATE.yourCards = playerCards;
+
+  // Update UI
+  document.getElementById('name-left').textContent = STATE.players[0].name;
+  document.getElementById('name-right').textContent = 'Sifir Tower';
+  document.getElementById('avatar-left').textContent = STATE.players[0].name.charAt(0).toUpperCase();
+  document.getElementById('avatar-right').textContent = 'S';
+  document.getElementById('fighter-right').querySelector('.fighter-type').textContent = 'Tower';
+
+  document.getElementById('hdr-room').textContent = 'SOLO';
+  document.getElementById('hdr-timer').textContent = settings.timer + 's';
+  document.getElementById('hdr-round').textContent = '0';
+  document.getElementById('round-num').textContent = '0';
+
+  // Hide background, connect screen, show game
+  document.getElementById('bg-layer').style.display = 'none';
+  document.getElementById('warriors-bg').style.display = 'none';
+  document.getElementById('connect-screen').style.display = 'none';
+  document.getElementById('game-layout').classList.add('show');
+
+  updateAllUI();
+  Sound.startFight();
+
+  setTimeout(function () { soloNextTurn(); }, 2000);
+}
+
+function dealCards() {
+  var pool = [
+    { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: '2x damage on next correct answer' },
+    { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block next incoming attack' },
+    { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Stop timer for current question' },
+    { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore +20 HP' },
+    { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Show if answer is even or odd' },
+    { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'New question, no penalty' },
+    { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Steal 15 HP from opponent' },
+    { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'No penalty on next wrong answer' },
+    { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: '+3 streak instantly' },
+    { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect damage to opponent (1 turn)' }
+  ];
+  var shuffled = pool.slice();
+  var cards = [];
+  for (var i = 0; i < 3; i++) {
+    var idx = Math.floor(Math.random() * shuffled.length);
+    cards.push({ id: shuffled[idx].id, name: shuffled[idx].name, icon: shuffled[idx].icon, category: shuffled[idx].category, desc: shuffled[idx].desc, used: false });
+    shuffled.splice(idx, 1);
+  }
+  return cards;
+}
+
+function soloNextTurn() {
+  if (!STATE.battleActive) return;
+  STATE.round++;
+  STATE.currentPlayer = 0;
+  document.getElementById('hdr-round').textContent = STATE.round;
+  document.getElementById('round-num').textContent = STATE.round;
+  document.getElementById('fighter-left').classList.add('active');
+  document.getElementById('fighter-right').classList.remove('active');
+
+  // Generate question
+  var question = soloGenerateQuestion();
+  STATE.currentQuestion = question;
+  STATE.questionStartTime = Date.now();
+
+  document.getElementById('turn-name').textContent = STATE.players[0].name + ' (You)';
+  document.getElementById('question-display').textContent = question.a + ' x ' + question.b + ' = ?';
+  document.getElementById('answer-input').value = '';
+  document.getElementById('feedback-msg').textContent = '';
+  document.getElementById('feedback-msg').className = 'feedback-msg';
+  document.getElementById('hint-display').textContent = '';
+
+  // Enable input
+  document.getElementById('answer-input').disabled = false;
+  document.getElementById('btn-attack').disabled = false;
+  document.getElementById('answer-input').focus();
+
+  Sound.roundStart();
+  startTimerDisplay(STATE.settings.timer);
+  updateCardInteractivity();
+}
+
+function soloGenerateQuestion() {
+  var sifirNum, multiplier;
+  if (STATE.settings.sifir > 0) {
+    sifirNum = STATE.settings.sifir;
+  } else {
+    sifirNum = Math.floor(Math.random() * 12) + 1;
+  }
+  var min, max;
+  switch (STATE.settings.difficulty) {
+    case 'easy': min = 1; max = 5; break;
+    case 'medium': min = 6; max = 9; break;
+    case 'hard': min = 10; max = 12; break;
+    default: min = 1; max = 12;
+  }
+  multiplier = Math.floor(Math.random() * (max - min + 1)) + min;
+  var a, b;
+  if (Math.random() < 0.5) { a = sifirNum; b = multiplier; }
+  else { a = multiplier; b = sifirNum; }
+  return { a: a, b: b, answer: a * b, isWeak: false };
+}
+
+function soloHandleAnswer(answer) {
+  if (!STATE.battleActive || !STATE.currentQuestion) return;
+  stopTimerDisplay();
+  var player = STATE.players[0];
+  var opponent = STATE.players[1];
+  var userAnswer = parseInt(answer);
+
+  if (isNaN(userAnswer) || userAnswer !== STATE.currentQuestion.answer) {
+    soloHandleWrong(player);
+  } else {
+    soloHandleCorrect(player, opponent);
+  }
+
+  updateAllUI();
+  setTimeout(function () {
+    if (soloCheckWin()) return;
+    soloNextTurn();
+  }, 1500);
+}
+
+function soloHandleCorrect(player, opponent) {
+  player.correct++;
+  player.streak++;
+  player.score += 10;
+  var damage = 10;
+  var bonusMsg = '';
+
+  var timeTaken = STATE.currentQuestion ? (Date.now() - STATE.questionStartTime) / 1000 : 99;
+  if (timeTaken < STATE.settings.timer / 2) { damage += 5; bonusMsg += ' +5 (Fast!)'; }
+  if (player.streak >= 5) { damage += 10; bonusMsg += ' +10 (Streak 5!)'; }
+  else if (player.streak >= 3) { damage += 5; bonusMsg += ' +5 (Streak 3!)'; }
+
+  if (player.activeEffects.doubleStrike) { damage *= 2; bonusMsg += ' x2 (Double Strike!)'; player.activeEffects.doubleStrike = false; updateEffectBadges(); removeAura(0, 'strike'); }
+
+  var actualDamage = damage;
+  if (opponent.activeEffects.shield) { opponent.activeEffects.shield = false; actualDamage = 0; bonusMsg += ' (Blocked by Shield!)'; updateEffectBadges(); removeAura(1, 'shield'); showPowerEffect('shield', 1); }
+  if (opponent.activeEffects.mirrorShield) { opponent.activeEffects.mirrorShield = false; actualDamage = 0; player.hp = Math.max(0, player.hp - damage); bonusMsg += ' (Reflected by Mirror!)'; updateEffectBadges(); removeAura(1, 'mirror'); showPowerEffect('mirrorShield', 1); showFloatingDamage('fighter-left', '-' + damage, 'dmg'); }
+
+  opponent.hp = Math.max(0, opponent.hp - actualDamage);
+
+  document.getElementById('feedback-msg').textContent = 'CORRECT! -' + actualDamage + ' HP' + bonusMsg;
+  document.getElementById('feedback-msg').className = 'feedback-msg correct';
+  Sound.correct();
+  setTimeout(function () { Sound.attack(); }, 150);
+  if (damage > 0) setTimeout(function () { Sound.streak(); }, 300);
+
+  document.getElementById('fighter-right').classList.add('shake', 'flash-red');
+  setTimeout(function () { document.getElementById('fighter-right').classList.remove('shake', 'flash-red'); }, 500);
+  if (actualDamage > 0) showFloatingDamage('fighter-right', '-' + actualDamage, 'dmg');
+  addLog('correct', player.name + ' answered correctly: ' + STATE.currentQuestion.a + 'x' + STATE.currentQuestion.b + '=' + STATE.currentQuestion.answer + ' (-' + actualDamage + ' HP)');
+}
+
+function soloHandleWrong(player) {
+  if (player.activeEffects.secondChance) {
+    player.activeEffects.secondChance = false;
+    updateEffectBadges();
+    removeAura(0, 'chance');
+    addLog('card', player.name + ' used Second Chance! No penalty.');
+    document.getElementById('feedback-msg').textContent = 'WRONG! But Second Chance saved you! Answer: ' + STATE.currentQuestion.answer;
+    document.getElementById('feedback-msg').className = 'feedback-msg card';
+    Sound.shieldBlock();
+    updateAllUI();
+    return;
+  }
+
+  player.wrong++;
+  player.streak = 0;
+  player.hp = Math.max(0, player.hp - 5);
+
+  Sound.wrong();
+  document.getElementById('feedback-msg').textContent = 'WRONG! Answer: ' + STATE.currentQuestion.answer + ' (-5 HP)';
+  document.getElementById('feedback-msg').className = 'feedback-msg wrong';
+  document.getElementById('fighter-left').classList.add('shake', 'flash-red');
+  setTimeout(function () { document.getElementById('fighter-left').classList.remove('shake', 'flash-red'); }, 500);
+  showFloatingDamage('fighter-left', '-5', 'dmg');
+  addLog('wrong', player.name + ' answered wrong (Answer: ' + STATE.currentQuestion.answer + ', -5 HP)');
+  updateAllUI();
+}
+
+function soloHandleTimeout() {
+  if (!STATE.battleActive || !STATE.currentQuestion) return;
+  var player = STATE.players[0];
+
+  if (player.activeEffects.secondChance) {
+    player.activeEffects.secondChance = false;
+    updateEffectBadges();
+    removeAura(0, 'chance');
+    addLog('card', player.name + ' used Second Chance on timeout!');
+    document.getElementById('feedback-msg').textContent = 'TIME OUT! But Second Chance saved you! Answer: ' + STATE.currentQuestion.answer;
+    document.getElementById('feedback-msg').className = 'feedback-msg card';
+    Sound.shieldBlock();
+    updateAllUI();
+    setTimeout(function () { if (soloCheckWin()) return; soloNextTurn(); }, 1500);
+    return;
+  }
+
+  player.wrong++;
+  player.streak = 0;
+  player.hp = Math.max(0, player.hp - 8);
+
+  Sound.timeout();
+  document.getElementById('feedback-msg').textContent = 'TIME OUT! Answer: ' + STATE.currentQuestion.answer + ' (-8 HP)';
+  document.getElementById('feedback-msg').className = 'feedback-msg timeout';
+  document.getElementById('fighter-left').classList.add('shake', 'flash-red');
+  setTimeout(function () { document.getElementById('fighter-left').classList.remove('shake', 'flash-red'); }, 500);
+  showFloatingDamage('fighter-left', '-8', 'dmg');
+  addLog('timeout', player.name + ' timed out! (Answer: ' + STATE.currentQuestion.answer + ', -8 HP)');
+  updateAllUI();
+  setTimeout(function () { if (soloCheckWin()) return; soloNextTurn(); }, 1500);
+}
+
+function soloCheckWin() {
+  var players = STATE.players;
+  for (var i = 0; i < players.length; i++) {
+    if (players[i].hp <= 0) {
+      STATE.battleActive = false;
+      stopTimerDisplay();
+      var winnerIdx = 1 - i;
+      var winner = players[winnerIdx];
+      document.getElementById('answer-input').disabled = true;
+      document.getElementById('btn-attack').disabled = true;
+
+      // Display winner
+      Sound.winner();
+      document.getElementById('winner-name').textContent = (winnerIdx === 0 ? 'You' : 'Sifir Tower') + ' Win!';
+      var acc = winner.correct + winner.wrong > 0 ? Math.round((winner.correct / (winner.correct + winner.wrong)) * 100) : 0;
+      document.getElementById('winner-stats').innerHTML =
+        '<div class="winner-stat"><div class="ws-label">Score</div><div class="ws-value">' + winner.score + '</div></div>' +
+        '<div class="winner-stat"><div class="ws-label">Correct</div><div class="ws-value" style="color:var(--neon-green)">' + winner.correct + '</div></div>' +
+        '<div class="winner-stat"><div class="ws-label">Wrong</div><div class="ws-value" style="color:var(--neon-red)">' + winner.wrong + '</div></div>' +
+        '<div class="winner-stat"><div class="ws-label">Accuracy</div><div class="ws-value" style="color:var(--neon-yellow)">' + acc + '%</div></div>';
+      document.getElementById('winner-overlay').classList.add('show');
+
+      // Save high score to localStorage
+      if (winnerIdx === 0) {
+        try {
+          var highScore = parseInt(localStorage.getItem('soloHighScore') || '0');
+          if (winner.score > highScore) {
+            localStorage.setItem('soloHighScore', winner.score);
+          }
+        } catch (e) {}
+      }
+
+      addLog('winner', (winnerIdx === 0 ? 'You' : 'Sifir Tower') + ' WINS!');
+      return true;
+    }
+  }
+  return false;
+}
+
+function soloActivateCard(cardIdx) {
+  if (!STATE.battleActive || STATE.currentPlayer !== 0) return;
+  var player = STATE.players[0];
+  var card = player.cards[cardIdx];
+  if (!card || card.used) return;
+
+  showPowerEffect(card.id, 0);
+  Sound.cardActivate();
+
+  switch (card.id) {
+    case 'doubleStrike': player.activeEffects.doubleStrike = true; addLog('card', 'Double Strike active!'); break;
+    case 'shield': player.activeEffects.shield = true; addLog('card', 'Shield active!'); break;
+    case 'timeFreeze': stopTimerDisplay(); clearInterval(STATE.timerInterval); document.getElementById('timer-text').textContent = 'FROZEN'; addLog('card', 'Time Freeze!'); break;
+    case 'healPotion': var heal = Math.min(20, player.maxHP - player.hp); player.hp += heal; addLog('card', 'Healed +' + heal + ' HP!'); break;
+    case 'revealHint': var hint = STATE.currentQuestion.answer % 2 === 0 ? 'EVEN' : 'ODD'; document.getElementById('hint-display').textContent = 'Hint: Answer is ' + hint; addLog('card', 'Revealed hint: ' + hint); break;
+    case 'skipQuestion': stopTimerDisplay(); addLog('card', 'Skipped question!'); setTimeout(function () { if (STATE.battleActive) { soloNextTurn(); } }, 500); break;
+    case 'stealHP': var opp = STATE.players[1]; var steal = Math.min(15, opp.hp); opp.hp -= steal; player.hp = Math.min(player.maxHP, player.hp + steal); addLog('card', 'Stole ' + steal + ' HP!'); break;
+    case 'secondChance': player.activeEffects.secondChance = true; addLog('card', 'Second Chance ready!'); break;
+    case 'streakBoost': player.streak += 3; addLog('card', 'Streak boosted to ' + player.streak + '!'); break;
+    case 'mirrorShield': player.activeEffects.mirrorShield = true; addLog('card', 'Mirror Shield active!'); break;
+  }
+
+  card.used = true;
+  updateAllUI();
+  updateCardInteractivity();
+}
+
 function updateModeDesc(mode) {
   var desc = document.getElementById('mode-desc');
   if (mode === 'tower') {
     desc.textContent = 'Work together to defeat the Sifir Tower. Tower grows stronger with more players!';
+  } else if (mode === 'solo') {
+    desc.textContent = 'Face the Sifir Tower alone. Answer correctly to destroy the tower!';
+    document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
   } else {
     desc.textContent = 'Fight against other players. Last one standing wins!';
   }
@@ -741,22 +1257,39 @@ function updateModeDesc(mode) {
 function initModeToggle() {
   var ffaBtn = document.querySelector('.mode-btn.ffa');
   var towerBtn = document.querySelector('.mode-btn.tower');
-  if (!ffaBtn || !towerBtn) return;
+  var soloBtn = document.querySelector('.mode-btn.solo');
+  if (!ffaBtn || !towerBtn || !soloBtn) return;
 
   function setMode(mode) {
     STATE.gameMode = mode;
     ffaBtn.classList.toggle('active', mode === 'ffa');
     towerBtn.classList.toggle('active', mode === 'tower');
+    soloBtn.classList.toggle('active', mode === 'solo');
     updateModeDesc(mode);
     updateWarriorDisplay(mode);
+    // Toggle UI sections for solo vs multiplayer
+    var isSolo = mode === 'solo';
+    document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
+    document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
+    document.getElementById('join-section').style.display = isSolo ? 'none' : '';
+    document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
+    document.getElementById('connect-status').style.display = isSolo ? 'none' : '';
+    document.getElementById('solo-high-score').style.display = isSolo ? '' : 'none';
+    if (isSolo) {
+      try {
+        document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
+      } catch(e) {}
+    }
   }
 
   ffaBtn.addEventListener('click', function () { setMode('ffa'); });
   towerBtn.addEventListener('click', function () { setMode('tower'); });
+  soloBtn.addEventListener('click', function () { setMode('solo'); });
 }
 
 /* ==================== WEBSOCKET CONNECTION ==================== */
 function connectWebSocket() {
+  if (STATE.gameMode === 'solo') return;
   var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var wsUrl = protocol + '//' + location.host;
   STATE.ws = new WebSocket(wsUrl);
@@ -1091,6 +1624,9 @@ function startTimerDisplay(timerDuration) {
       STATE.timeLeft = 0;
       stopTimerDisplay();
       updateTimerDisplay();
+      if (STATE.gameMode === 'solo' && STATE.battleActive) {
+        soloHandleTimeout();
+      }
       return;
     }
     var cs = Math.ceil(STATE.timeLeft);
@@ -1201,7 +1737,11 @@ function activateCard(playerIdx, cardIdx) {
   if (!STATE.battleActive) return;
   var card = STATE.yourCards[cardIdx];
   if (!card || card.used) return;
-  send({ type: 'activateCard', cardIdx: cardIdx });
+  if (STATE.gameMode === 'solo') {
+    soloActivateCard(cardIdx);
+  } else {
+    send({ type: 'activateCard', cardIdx: cardIdx });
+  }
 }
 
 function updateEffectBadges() {
@@ -1391,11 +1931,29 @@ function initEventListeners() {
     send({ type: 'joinRoom', code: code });
   });
 
+  // Solo start
+  document.getElementById('btn-solo-start').addEventListener('click', function () {
+    Sound.init(); Sound.click();
+    var name = document.getElementById('player-name').value.trim() || 'Hero';
+    var settings = {
+      timer: parseInt(document.getElementById('setting-timer').value),
+      sifir: parseInt(document.getElementById('setting-sifir').value),
+      difficulty: document.getElementById('setting-difficulty').value,
+      gameMode: 'solo'
+    };
+    STATE.settings = settings;
+    startSoloGame();
+  });
+
   // Attack button
   document.getElementById('btn-attack').addEventListener('click', function () {
     Sound.click();
     var answer = document.getElementById('answer-input').value;
-    send({ type: 'answer', answer: answer });
+    if (STATE.gameMode === 'solo') {
+      soloHandleAnswer(answer);
+    } else {
+      send({ type: 'answer', answer: answer });
+    }
     document.getElementById('answer-input').disabled = true;
     document.getElementById('btn-attack').disabled = true;
   });
@@ -1404,7 +1962,11 @@ function initEventListeners() {
   document.getElementById('answer-input').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && STATE.battleActive && STATE.currentPlayer === STATE.you) {
       var answer = document.getElementById('answer-input').value;
-      send({ type: 'answer', answer: answer });
+      if (STATE.gameMode === 'solo') {
+        soloHandleAnswer(answer);
+      } else {
+        send({ type: 'answer', answer: answer });
+      }
       document.getElementById('answer-input').disabled = true;
       document.getElementById('btn-attack').disabled = true;
     }
@@ -1439,7 +2001,11 @@ function initEventListeners() {
   document.getElementById('winner-rematch').addEventListener('click', function () {
     Sound.click();
     document.getElementById('winner-overlay').classList.remove('show');
-    send({ type: 'rematch' });
+    if (STATE.gameMode === 'solo') {
+      startSoloGame();
+    } else {
+      send({ type: 'rematch' });
+    }
   });
   document.getElementById('winner-close').addEventListener('click', function () {
     Sound.click();
