@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASMD Sifir Hero Arena - Multiplayer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -26,7 +29,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Consolas','C
 
 /* HEADER */
 header{text-align:center;padding:12px 16px;background:linear-gradient(180deg,var(--bg-card) 0%,var(--bg) 100%);border-bottom:2px solid var(--neon-cyan);box-shadow:0 2px 20px rgba(0,240,255,0.2);}
-header h1{font-size:1.6rem;letter-spacing:3px;text-transform:uppercase;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 30px rgba(0,240,255,0.3);}
+header h1{font-family:'Pirata One',cursive;font-size:2rem;font-weight:400;letter-spacing:3px;text-transform:uppercase;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 30px rgba(0,240,255,0.3);}
 header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;margin-top:2px;}
 .header-info{display:flex;justify-content:center;gap:16px;margin-top:8px;flex-wrap:wrap;}
 .header-info .chip{font-size:0.7rem;padding:3px 12px;border:1px solid var(--border);border-radius:20px;color:var(--text-dim);}
@@ -299,6 +302,12 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .floating-element.num-5{color:var(--neon-purple);}
 .floating-element.num-6{color:var(--neon-orange);}
 .floating-element.sign{color:var(--neon-yellow);font-size:1.8rem;opacity:0.5;}
+.floating-card{position:absolute;pointer-events:none;opacity:0;animation:floatUp linear infinite;will-change:transform;z-index:0;width:44px;height:52px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:bold;background:rgba(19,19,31,0.6);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 12px currentColor;text-transform:uppercase;letter-spacing:0.5px;}
+.floating-card.cat-offensive{color:var(--neon-red);border-color:var(--neon-red);}
+.floating-card.cat-defensive{color:var(--neon-cyan);border-color:var(--neon-cyan);}
+.floating-card.cat-support{color:var(--neon-green);border-color:var(--neon-green);}
+.floating-card.cat-utility{color:var(--neon-yellow);border-color:var(--neon-yellow);}
+.floating-card.cat-recovery{color:var(--neon-purple);border-color:var(--neon-purple);}
 
 /* ==================== NUMBER WARRIORS ==================== */
 #warriors-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
@@ -326,7 +335,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .connect-card.modern{background:rgba(19,19,31,0.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 40px rgba(0,240,255,0.08),0 8px 32px rgba(0,0,0,0.4);position:relative;z-index:2;}
 .connect-card.modern::before{content:'';position:absolute;inset:-1px;border-radius:12px;padding:1px;background:linear-gradient(135deg,var(--neon-cyan),transparent,var(--neon-purple),transparent,var(--neon-red));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:0.6;animation:borderGlow 4s ease-in-out infinite alternate;}
 @keyframes borderGlow{from{opacity:0.3;}to{opacity:0.8;}}
-.connect-card.modern .connect-title{font-size:1.5rem;letter-spacing:4px;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none;animation:titlePulse 3s ease-in-out infinite alternate;}
+.connect-card.modern .connect-title{font-family:'Pirata One',cursive;font-size:2rem;font-weight:400;letter-spacing:4px;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none;animation:titlePulse 3s ease-in-out infinite alternate;}
 @keyframes titlePulse{from{filter:brightness(0.8);}to{filter:brightness(1.3);}}
 .connect-card.modern .connect-title-sub{font-size:0.65rem;color:var(--text-dim);letter-spacing:3px;text-transform:uppercase;margin-bottom:24px;margin-top:-12px;}
 
@@ -349,8 +358,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 @keyframes auraSpin{from{transform:rotate(0deg) scale(1);}to{transform:rotate(360deg) scale(1);}}
 #screen-flash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;pointer-events:none;opacity:0;transition:opacity 0.05s;}
 #screen-flash.active{opacity:0.3;background:white;}
-.energy-beam{position:absolute;height:3px;background:linear-gradient(90deg,transparent,var(--neon-cyan),var(--neon-yellow),var(--neon-red),transparent);box-shadow:0 0 20px var(--neon-yellow),0 0 40px var(--neon-cyan);opacity:0;animation:beamPulse 2s ease-in-out infinite;z-index:1;border-radius:2px;}
-@keyframes beamPulse{0%,100%{opacity:0;transform:scaleX(0.5);}25%{opacity:0.6;transform:scaleX(1);}50%{opacity:0.8;transform:scaleX(1.1);}75%{opacity:0.4;transform:scaleX(0.8);}}
+
 .btn-solo-start{background:linear-gradient(135deg,var(--neon-green),#00cc66);color:#000;box-shadow:var(--glow-green);}
 .btn-solo-start:hover{filter:brightness(1.2);transform:translateY(-1px);}
 .solo-high-score{font-size:0.65rem;color:var(--neon-yellow);text-align:center;margin-top:8px;letter-spacing:1px;}
@@ -392,7 +400,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
     <div class="warrior-label">HERO</div>
     <div class="warrior-hp" id="warrior-hero-hp">HP 100</div>
   </div>
-  <div class="energy-beam" id="energy-beam"></div>
+
   <div id="vs-lightning">⚡</div>
   <div class="warrior tower" id="warrior-tower">
     <div class="warrior-box" id="warrior-tower-box">56</div>
@@ -653,10 +661,10 @@ var Sound = {
 /* ==================== BACKGROUND EFFECTS ==================== */
 function initBackground() {
   initFloatingNumbers();
+  initFloatingCards();
   initParticles();
   initMagicRunes();
   initLightningStrikes();
-  initEnergyBeam();
   updateWarriorDisplay('ffa');
   setInterval(function () {
     if (document.getElementById('warriors-bg').style.display !== 'none') {
@@ -689,6 +697,32 @@ function initFloatingNumbers() {
     el.style.animationDuration = (15 + Math.random() * 20) + 's';
     el.style.animationDelay = (Math.random() * 15) + 's';
     bg.insertBefore(el, bg.firstChild);
+  }
+}
+
+function initFloatingCards() {
+  var bg = document.getElementById('bg-layer');
+  var cards = [
+    { icon: 'X2', cat: 'cat-offensive' },
+    { icon: 'SH', cat: 'cat-defensive' },
+    { icon: 'TF', cat: 'cat-support' },
+    { icon: 'HP', cat: 'cat-recovery' },
+    { icon: 'RH', cat: 'cat-support' },
+    { icon: 'SQ', cat: 'cat-utility' },
+    { icon: 'ST', cat: 'cat-offensive' },
+    { icon: 'SC', cat: 'cat-defensive' },
+    { icon: 'SB', cat: 'cat-offensive' },
+    { icon: 'MS', cat: 'cat-defensive' }
+  ];
+  for (var i = 0; i < 12; i++) {
+    var card = cards[Math.floor(Math.random() * cards.length)];
+    var el = document.createElement('div');
+    el.className = 'floating-card ' + card.cat;
+    el.textContent = card.icon;
+    el.style.left = (Math.random() * 90 + 2) + '%';
+    el.style.animationDuration = (18 + Math.random() * 22) + 's';
+    el.style.animationDelay = (Math.random() * 20) + 's';
+    bg.appendChild(el);
   }
 }
 
@@ -907,25 +941,6 @@ function drawLightning(ctx) {
   }
   // Cleanup dead strikes
   lightningState.strikes = lightningState.strikes.filter(function (s) { return s.life > 0; });
-}
-
-function initEnergyBeam() {
-  var beam = document.getElementById('energy-beam');
-  if (!beam) return;
-  function positionBeam() {
-    var hero = document.getElementById('warrior-hero');
-    var tower = document.getElementById('warrior-tower');
-    var vLightning = document.getElementById('vs-lightning');
-    if (hero && tower && vLightning) {
-      beam.style.position = 'absolute';
-      beam.style.top = '50%';
-      beam.style.left = '25%';
-      beam.style.width = '50%';
-      beam.style.transform = 'translateY(-50%)';
-    }
-  }
-  positionBeam();
-  window.addEventListener('resize', positionBeam);
 }
 
 function updateWarriorDisplay(mode) {
