@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASMD Sifir Hero Arena - Multiplayer</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pirata+One&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -29,7 +26,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Consolas','C
 
 /* HEADER */
 header{text-align:center;padding:12px 16px;background:linear-gradient(180deg,var(--bg-card) 0%,var(--bg) 100%);border-bottom:2px solid var(--neon-cyan);box-shadow:0 2px 20px rgba(0,240,255,0.2);}
-header h1{font-family:'Pirata One',cursive;font-size:2rem;font-weight:400;letter-spacing:3px;text-transform:uppercase;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 30px rgba(0,240,255,0.3);}
+header h1{font-size:1.6rem;letter-spacing:3px;text-transform:uppercase;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 30px rgba(0,240,255,0.3);}
 header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;margin-top:2px;}
 .header-info{display:flex;justify-content:center;gap:16px;margin-top:8px;flex-wrap:wrap;}
 .header-info .chip{font-size:0.7rem;padding:3px 12px;border:1px solid var(--border);border-radius:20px;color:var(--text-dim);}
@@ -285,7 +282,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .disconnect-overlay.show{display:flex;}
 .disconnect-msg{font-size:1.5rem;color:var(--neon-red);text-shadow:var(--glow-red);text-transform:uppercase;letter-spacing:2px;}
 
-@media(max-width:600px){header h1{font-size:1.1rem;}.question-display{font-size:1.8rem;}.fighters-row{grid-template-columns:1fr;}.vs-indicator{flex-direction:row;justify-content:center;}.vs-fighters{flex-direction:column;gap:20px;}.vs-big{font-size:3rem;}}
+@media(max-width:600px){.question-display{font-size:1.8rem;}.fighters-row{grid-template-columns:1fr;}.vs-indicator{flex-direction:row;justify-content:center;}.vs-fighters{flex-direction:column;gap:20px;}.vs-big{font-size:3rem;}}
 
 /* ==================== LANDING PAGE MAGIC BACKGROUND ==================== */
 #bg-layer{position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;overflow:hidden;background:var(--bg);}
@@ -335,7 +332,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .connect-card.modern{background:rgba(19,19,31,0.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 40px rgba(0,240,255,0.08),0 8px 32px rgba(0,0,0,0.4);position:relative;z-index:2;}
 .connect-card.modern::before{content:'';position:absolute;inset:-1px;border-radius:12px;padding:1px;background:linear-gradient(135deg,var(--neon-cyan),transparent,var(--neon-purple),transparent,var(--neon-red));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:0.6;animation:borderGlow 4s ease-in-out infinite alternate;}
 @keyframes borderGlow{from{opacity:0.3;}to{opacity:0.8;}}
-.connect-card.modern .connect-title{font-family:'Pirata One',cursive;font-size:2rem;font-weight:400;letter-spacing:4px;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none;animation:titlePulse 3s ease-in-out infinite alternate;}
+.connect-card.modern .connect-title{font-size:1.5rem;letter-spacing:4px;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-purple),var(--neon-red));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-shadow:none;animation:titlePulse 3s ease-in-out infinite alternate;}
 @keyframes titlePulse{from{filter:brightness(0.8);}to{filter:brightness(1.3);}}
 .connect-card.modern .connect-title-sub{font-size:0.65rem;color:var(--text-dim);letter-spacing:3px;text-transform:uppercase;margin-bottom:24px;margin-top:-12px;}
 
@@ -377,7 +374,6 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 <button class="info-toggle" id="info-toggle" title="Magic Cards Info">?</button>
 
 <header>
-  <h1>ASMD Sifir Hero Arena</h1>
   <div class="subtitle">MULTIPLAYER - FIGHTER EDITION</div>
   <div class="header-info">
     <div class="chip">Room: <span id="hdr-room">-</span></div>
