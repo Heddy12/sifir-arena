@@ -1,0 +1,25 @@
+{
+  "name": "asmd-sifir-hero-arena",
+  "version": "1.0.0",
+  "description": "ASMD Sifir Hero Arena - Fighter Edition (Multiplayer Server)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "education",
+    "math",
+    "multiplication",
+    "game",
+    "multiplayer",
+    "sifir"
+  ],
+  "license": "MIT"
+}
