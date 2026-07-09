@@ -306,27 +306,32 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .floating-card.cat-utility{color:var(--neon-yellow);border-color:var(--neon-yellow);}
 .floating-card.cat-recovery{color:var(--neon-purple);border-color:var(--neon-purple);}
 
-/* ==================== NUMBER WARRIORS ==================== */
+/* ==================== CHARACTERS (ICE GIRL / FIRE BOY) ==================== */
 #warriors-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
-.warrior{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;}
-.warrior.hero{left:10%;bottom:50%;transform:translateY(50%);animation:warriorFloatHero 4s ease-in-out infinite;}
-.warrior.tower{right:10%;bottom:50%;transform:translateY(50%);animation:warriorFloatTower 4s ease-in-out infinite;}
-@keyframes warriorFloatHero{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
-@keyframes warriorFloatTower{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
-.warrior-box{width:120px;height:120px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:2.8rem;font-weight:bold;position:relative;overflow:hidden;background:var(--bg-card-2);}
-.warrior.hero .warrior-box{border:2px solid var(--neon-cyan);box-shadow:0 0 30px rgba(0,240,255,0.4),inset 0 0 30px rgba(0,240,255,0.1);animation:heroGlow 2s ease-in-out infinite alternate;}
-@keyframes heroGlow{from{box-shadow:0 0 20px rgba(0,240,255,0.3),inset 0 0 20px rgba(0,240,255,0.05);}to{box-shadow:0 0 40px rgba(0,240,255,0.6),inset 0 0 40px rgba(0,240,255,0.15);}}
-.warrior.tower .warrior-box{border:2px solid var(--neon-red);box-shadow:0 0 30px rgba(255,46,99,0.4),inset 0 0 30px rgba(255,46,99,0.1);animation:towerGlow 2s ease-in-out infinite alternate;}
-@keyframes towerGlow{from{box-shadow:0 0 20px rgba(255,46,99,0.3),inset 0 0 20px rgba(255,46,99,0.05);}to{box-shadow:0 0 40px rgba(255,46,99,0.6),inset 0 0 40px rgba(255,46,99,0.15);}}
-.warrior-label{font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;margin-top:8px;color:var(--text-dim);}
-.warrior.hero .warrior-label{color:var(--neon-cyan);}
-.warrior.tower .warrior-label{color:var(--neon-red);}
-.warrior-hp{font-size:0.6rem;margin-top:4px;letter-spacing:1px;}
-.warrior.hero .warrior-hp{color:var(--neon-cyan);}
-.warrior.tower .warrior-hp{color:var(--neon-red);}
+.character{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;width:160px;}
+.character.ice-girl{left:8%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
+.character.fire-boy{right:8%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
+@keyframes charFloatIce{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
+@keyframes charFloatFire{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
+.char-aura{position:absolute;top:50%;left:50%;width:220px;height:220px;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;filter:blur(22px);opacity:0.6;}
+.char-aura.ice{background:radial-gradient(circle,rgba(0,240,255,0.55) 0%,rgba(0,240,255,0.12) 40%,transparent 70%);animation:iceShimmer 3s ease-in-out infinite alternate;}
+.char-aura.fire{background:radial-gradient(circle,rgba(255,107,0,0.55) 0%,rgba(255,46,99,0.18) 40%,transparent 70%);animation:fireFlicker 0.4s ease-in-out infinite alternate;}
+@keyframes iceShimmer{from{opacity:0.4;transform:translate(-50%,-50%) scale(0.95);}to{opacity:0.7;transform:translate(-50%,-50%) scale(1.05);}}
+@keyframes fireFlicker{from{opacity:0.45;transform:translate(-50%,-50%) scale(0.92) rotate(-3deg);}to{opacity:0.72;transform:translate(-50%,-50%) scale(1.08) rotate(3deg);}}
+.char-img{width:160px;height:auto;max-height:250px;position:relative;z-index:1;filter:drop-shadow(0 0 12px rgba(0,0,0,0.6));}
+.char-emoji{font-size:4.5rem;line-height:1;position:relative;z-index:1;filter:drop-shadow(0 0 15px currentColor);display:none;align-items:center;justify-content:center;}
+.character.ice-girl .char-emoji{color:var(--neon-cyan);}
+.character.fire-boy .char-emoji{color:var(--neon-orange);}
+.held-cards{display:flex;gap:6px;margin-top:12px;z-index:2;position:relative;}
+.held-number{width:56px;height:42px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;background:var(--bg-card-2);border:2px solid var(--neon-yellow);color:var(--neon-yellow);box-shadow:0 0 10px rgba(255,230,0,0.3);}
+.held-magic{width:42px;height:42px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:bold;text-transform:uppercase;background:rgba(19,19,31,0.85);border:2px solid var(--neon-red);color:var(--neon-red);box-shadow:0 0 10px rgba(255,46,99,0.3);}
+.char-label{font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;margin-top:10px;color:var(--text-dim);}
+.character.ice-girl .char-label{color:var(--neon-cyan);}
+.character.fire-boy .char-label{color:var(--neon-orange);}
+.char-hp{font-size:0.6rem;margin-top:4px;letter-spacing:1px;}
+.character.ice-girl .char-hp{color:var(--neon-cyan);}
+.character.fire-boy .char-hp{color:var(--neon-orange);}
 #vs-lightning{position:absolute;font-size:4rem;font-weight:bold;color:var(--neon-yellow);text-shadow:0 0 40px rgba(255,230,0,0.6),0 0 80px rgba(255,230,0,0.3);animation:vsPulse 1s ease infinite alternate;z-index:1;}
-.warrior-bolt{position:absolute;width:3px;background:linear-gradient(180deg,var(--neon-yellow),var(--neon-red));box-shadow:0 0 10px var(--neon-yellow);animation:boltPulse 0.5s ease infinite alternate;z-index:0;transform-origin:center top;}
-@keyframes boltPulse{from{opacity:0.3;height:30%;}to{opacity:0.7;height:50%;}}
 
 /* ==================== GLASSMORPHISM CONNECT CARD ==================== */
 .connect-card.modern{background:rgba(19,19,31,0.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 40px rgba(0,240,255,0.08),0 8px 32px rgba(0,0,0,0.4);position:relative;z-index:2;}
@@ -362,9 +367,11 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 
 /* ==================== BACKGROUND RESPONSIVE ==================== */
 @media(max-width:768px){
-  .warrior-box{width:80px;height:80px;font-size:1.8rem;}
-  .warrior.hero{left:5%;}
-  .warrior.tower{right:5%;}
+  .character{width:110px;}
+  .char-img{width:110px;max-height:160px;}
+  .char-emoji{font-size:3rem;}
+  .character.ice-girl{left:3%;}
+  .character.fire-boy{right:3%;}
   #vs-lightning{font-size:2.5rem;}
 }
 </style>
@@ -389,19 +396,31 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 </div>
 <div id="screen-flash"></div>
 
-<!-- NUMBER WARRIORS -->
+<!-- CHARACTERS: ICE GIRL (left) & FIRE BOY (right) -->
 <div id="warriors-bg">
-  <div class="warrior hero" id="warrior-hero">
-    <div class="warrior-box" id="warrior-hero-box">7×8</div>
-    <div class="warrior-label">HERO</div>
-    <div class="warrior-hp" id="warrior-hero-hp">HP 100</div>
+  <div class="character ice-girl" id="char-ice">
+    <div class="char-aura ice"></div>
+    <img class="char-img" id="img-ice" src="images/ice-girl.png" alt="Ice Girl" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="char-emoji">❄️🧚</div>
+    <div class="held-cards">
+      <div class="held-number" id="ice-number">3×4</div>
+      <div class="held-magic" id="ice-magic">X2</div>
+    </div>
+    <div class="char-label">ICE GIRL</div>
+    <div class="char-hp" id="ice-hp">HP 100</div>
   </div>
 
   <div id="vs-lightning">⚡</div>
-  <div class="warrior tower" id="warrior-tower">
-    <div class="warrior-box" id="warrior-tower-box">56</div>
-    <div class="warrior-label">TOWER</div>
-    <div class="warrior-hp" id="warrior-tower-hp">HP 200</div>
+  <div class="character fire-boy" id="char-fire">
+    <div class="char-aura fire"></div>
+    <img class="char-img" id="img-fire" src="images/fire-boy.png" alt="Fire Boy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="char-emoji">🔥🧙</div>
+    <div class="held-cards">
+      <div class="held-number" id="fire-number">12</div>
+      <div class="held-magic" id="fire-magic">SH</div>
+    </div>
+    <div class="char-label">FIRE BOY</div>
+    <div class="char-hp" id="fire-hp">HP 200</div>
   </div>
 </div>
 
@@ -661,6 +680,7 @@ function initBackground() {
   initParticles();
   initMagicRunes();
   initLightningStrikes();
+  initHeldMagicCards();
   updateWarriorDisplay('ffa');
   setInterval(function () {
     if (document.getElementById('warriors-bg').style.display !== 'none') {
@@ -940,23 +960,35 @@ function drawLightning(ctx) {
 }
 
 function updateWarriorDisplay(mode) {
-  var heroBox = document.getElementById('warrior-hero-box');
-  var towerBox = document.getElementById('warrior-tower-box');
-  var heroHp = document.getElementById('warrior-hero-hp');
-  var towerHp = document.getElementById('warrior-tower-hp');
+  var iceNum = document.getElementById('ice-number');
+  var fireNum = document.getElementById('fire-number');
+  var iceHp = document.getElementById('ice-hp');
+  var fireHp = document.getElementById('fire-hp');
+  if (!iceNum || !fireNum) return;
   if (mode === 'tower' || mode === 'solo') {
-    heroBox.textContent = '3×4';
-    towerBox.textContent = '12';
-    heroHp.textContent = 'HP 100';
-    towerHp.textContent = 'HP 200';
+    iceNum.textContent = '3×4';
+    fireNum.textContent = '12';
+    iceHp.textContent = 'HP 100';
+    fireHp.textContent = 'HP 200';
   } else {
     var a = 5 + Math.floor(Math.random() * 7);
     var b = 2 + Math.floor(Math.random() * 6);
-    heroBox.textContent = a + '×' + b;
-    towerBox.textContent = a * b;
-    heroHp.textContent = 'HP 100';
-    towerHp.textContent = 'HP 100';
+    iceNum.textContent = a + '×' + b;
+    fireNum.textContent = a * b;
+    iceHp.textContent = 'HP 100';
+    fireHp.textContent = 'HP 100';
   }
+}
+
+function initHeldMagicCards() {
+  var icons = ['X2', 'SH', 'TF', 'HP', 'RH', 'SQ', 'ST', 'SC', 'SB', 'MS'];
+  var iceMagic = document.getElementById('ice-magic');
+  var fireMagic = document.getElementById('fire-magic');
+  if (!iceMagic || !fireMagic) return;
+  setInterval(function () {
+    iceMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
+    fireMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
+  }, 3000);
 }
 
 /* ==================== SINGLE PLAYER MODE (SOLO QUEST) ==================== */
