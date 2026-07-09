@@ -483,25 +483,49 @@ function broadcast(room, message) {
 }
 
 /* ==================== HTTP SERVER ==================== */
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2'
+};
+
+function serveFile(filePath, res, allow404) {
+  fs.readFile(filePath, function (err, data) {
+    if (err) {
+      if (allow404) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(500); res.end('Error loading file'); return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+}
+
 const server = http.createServer(function (req, res) {
-  if (req.url === '/' || req.url === '/client.html' || req.url === '/index.html') {
-    const filePath = path.join(__dirname, 'client.html');
-    fs.readFile(filePath, function (err, data) {
-      if (err) {
-        res.writeHead(500);
-        res.end('Error loading client.html');
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(data);
-    });
-  } else if (req.url === '/health') {
+  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  if (urlPath === '/' || urlPath === '/client.html' || urlPath === '/index.html') {
+    serveFile(path.join(__dirname, 'client.html'), res);
+    return;
+  }
+  if (urlPath === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', rooms: Object.keys(rooms).length, players: Object.keys(players).length }));
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
+    return;
   }
+  const resolved = path.resolve(__dirname, '.' + (urlPath.startsWith('/') ? urlPath : '/' + urlPath));
+  if (!resolved.startsWith(__dirname)) {
+    res.writeHead(403); res.end('Forbidden'); return;
+  }
+  serveFile(resolved, res, true);
 });
 
 /* ==================== WEBSOCKET SERVER ==================== */
