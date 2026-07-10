@@ -94,6 +94,7 @@ function createRoom(playerId, playerName, settings) {
     code: code,
     players: [playerId],
     settings: settings,
+    gameMode: settings.gameMode || 'ffa',
     gameState: null,
     weakQuestions: [],
     currentQuestion: null,
@@ -102,7 +103,10 @@ function createRoom(playerId, playerName, settings) {
     timerInterval: null,
     timeLeft: 0,
     questionStartTime: 0,
-    battleActive: false
+    battleActive: false,
+    sprintInterval: null,
+    sprintTimeLeft: 60,
+    sprintQuestions: [null, null]
   };
   players[playerId].roomCode = code;
   players[playerId].playerIdx = 0;
@@ -120,6 +124,7 @@ function joinRoom(playerId, playerName, code) {
 }
 
 function startBattle(room) {
+  if (room.gameMode === 'sprint') { startSprint(room); return; }
   const p1Id = room.players[0];
   const p2Id = room.players[1];
   const settings = room.settings;
@@ -209,7 +214,9 @@ function stopTimer(room) {
 }
 
 function handleAnswer(room, playerId, answer) {
-  if (!room.battleActive || !room.currentQuestion) return;
+  if (!room.battleActive) return;
+  if (room.gameMode === 'sprint') { handleSprintAnswer(room, playerId, answer); return; }
+  if (!room.currentQuestion) return;
   const playerIdx = players[playerId].playerIdx;
   if (playerIdx !== room.currentPlayer) return;
 
@@ -428,6 +435,158 @@ function handleCardActivate(room, playerId, cardIdx) {
   }
 }
 
+/* ==================== SPRINT MODE ==================== */
+function startSprint(room) {
+  const p1Id = room.players[0];
+  const p2Id = room.players[1];
+
+  room.gameState = {
+    players: [
+      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} },
+      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} }
+    ]
+  };
+
+  room.round = 0;
+  room.battleActive = true;
+  room.sprintTimeLeft = 60;
+
+  sendToPlayer(p1Id, { type: 'gameStart', you: 0, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p2Id, { type: 'gameStart', you: 1, players: room.gameState.players, yourCards: [], sprint: true });
+
+  // Generate first question for each player
+  room.sprintQuestions[0] = generateQuestion(room.settings.sifir, room.settings.difficulty);
+  room.sprintQuestions[1] = generateQuestion(room.settings.sifir, room.settings.difficulty);
+
+  // Start sprint match timer (60s)
+  const sprintStart = Date.now();
+  room.sprintInterval = setInterval(function () {
+    room.sprintTimeLeft = 60 - Math.floor((Date.now() - sprintStart) / 1000);
+    if (room.sprintTimeLeft <= 0) {
+      room.sprintTimeLeft = 0;
+      clearInterval(room.sprintInterval);
+      endSprint(room);
+      return;
+    }
+    broadcast(room, { type: 'sprintTick', timeLeft: room.sprintTimeLeft });
+  }, 1000);
+
+  // Send first questions after a short delay
+  setTimeout(function () {
+    if (!room.battleActive) return;
+    sendSprintQuestion(room, 0);
+    sendSprintQuestion(room, 1);
+  }, 1000);
+}
+
+function sendSprintQuestion(room, playerIdx) {
+  if (!room.battleActive) return;
+  const q = generateQuestion(room.settings.sifir, room.settings.difficulty);
+  room.sprintQuestions[playerIdx] = q;
+  const playerId = room.players[playerIdx];
+  sendToPlayer(playerId, {
+    type: 'newTurn',
+    round: 0,
+    currentPlayer: playerIdx,
+    question: { a: q.a, b: q.b, isWeak: q.isWeak },
+    timer: room.settings.timer,
+    sprint: true
+  });
+}
+
+function handleSprintAnswer(room, playerId, answer) {
+  if (!room.battleActive) return;
+  const playerIdx = players[playerId].playerIdx;
+  const player = room.gameState.players[playerIdx];
+  const question = room.sprintQuestions[playerIdx];
+  if (!question) return;
+
+  const userAnswer = parseInt(answer);
+  const isCorrect = !isNaN(userAnswer) && userAnswer === question.answer;
+
+  if (isCorrect) {
+    player.correct++;
+    player.streak++;
+    player.score += 10;
+  } else {
+    player.wrong++;
+    player.streak = 0;
+  }
+
+  sendToPlayer(playerId, {
+    type: 'answerResult',
+    correct: isCorrect,
+    playerIdx: playerIdx,
+    answer: question.answer,
+    sprint: true
+  });
+
+  broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
+
+  // Immediately send next question
+  setTimeout(function () {
+    if (room.battleActive) sendSprintQuestion(room, playerIdx);
+  }, 300);
+}
+
+function handleSprintTimeout(room, playerIdx) {
+  if (!room.battleActive) return;
+  const player = room.gameState.players[playerIdx];
+  const question = room.sprintQuestions[playerIdx];
+  if (!question) return;
+
+  player.wrong++;
+  player.streak = 0;
+
+  const playerId = room.players[playerIdx];
+  sendToPlayer(playerId, {
+    type: 'timeout',
+    playerIdx: playerIdx,
+    answer: question.answer,
+    sprint: true
+  });
+
+  broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
+
+  setTimeout(function () {
+    if (room.battleActive) sendSprintQuestion(room, playerIdx);
+  }, 300);
+}
+
+function endSprint(room) {
+  room.battleActive = false;
+  clearInterval(room.sprintInterval);
+  if (room.sprintTimers) {
+    room.sprintTimers.forEach(function (t) { clearInterval(t); });
+  }
+
+  const p0 = room.gameState.players[0];
+  const p1 = room.gameState.players[1];
+  let winnerIdx;
+  if (p0.correct > p1.correct) winnerIdx = 0;
+  else if (p1.correct > p0.correct) winnerIdx = 1;
+  else {
+    // Tie on correct — use accuracy
+    const acc0 = p0.correct + p0.wrong > 0 ? p0.correct / (p0.correct + p0.wrong) : 0;
+    const acc1 = p1.correct + p1.wrong > 0 ? p1.correct / (p1.correct + p1.wrong) : 0;
+    winnerIdx = acc0 >= acc1 ? 0 : 1;
+  }
+  const winner = room.gameState.players[winnerIdx];
+
+  broadcast(room, {
+    type: 'gameOver',
+    winnerIdx: winnerIdx,
+    winnerName: winner.name,
+    sprint: true,
+    stats: {
+      score: winner.score,
+      correct: winner.correct,
+      wrong: winner.wrong,
+      accuracy: winner.correct + winner.wrong > 0 ? Math.round((winner.correct / (winner.correct + winner.wrong)) * 100) : 0
+    }
+  });
+}
+
 function checkWin(room) {
   for (let i = 0; i < room.gameState.players.length; i++) {
     if (room.gameState.players[i].hp <= 0) {
@@ -459,6 +618,7 @@ function handleDisconnect(playerId) {
   if (room) {
     broadcast(room, { type: 'opponentLeft' });
     stopTimer(room);
+    if (room.sprintInterval) clearInterval(room.sprintInterval);
     room.battleActive = false;
     // Remove room after delay
     setTimeout(function () {
@@ -591,6 +751,14 @@ wss.on('connection', function connection(ws) {
       case 'answer':
         var room = rooms[players[playerId].roomCode];
         if (room) handleAnswer(room, playerId, message.answer);
+        break;
+
+      case 'sprintTimeout':
+        var room = rooms[players[playerId].roomCode];
+        if (room && room.gameMode === 'sprint') {
+          var idx = players[playerId].playerIdx;
+          handleSprintTimeout(room, idx);
+        }
         break;
 
       case 'activateCard':

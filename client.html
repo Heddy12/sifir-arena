@@ -266,6 +266,11 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .btn-exit:hover{transform:scale(1.1);border-color:var(--neon-red);}
 .btn-exit.show{display:flex;}
 
+/* SPRINT TIMER */
+.sprint-timer{display:none;font-size:2.5rem;font-weight:bold;color:var(--neon-yellow);text-shadow:var(--glow-yellow);text-align:center;letter-spacing:2px;margin-bottom:6px;}
+.sprint-timer.show{display:block;}
+.sprint-timer.warning{color:var(--neon-red);text-shadow:var(--glow-red);animation:pulse 0.5s infinite;}
+
 /* POWER EFFECTS */
 .power-effect{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;border-radius:var(--radius);overflow:hidden;}
 .pe-flash{animation:peFlash 0.6s ease forwards;}
@@ -371,6 +376,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .mode-btn.active.ffa{border-color:var(--neon-red);color:var(--neon-red);box-shadow:var(--glow-red);background:linear-gradient(135deg,rgba(255,46,99,0.12),rgba(255,46,99,0.06));}
 .mode-btn.active.tower{border-color:var(--neon-purple);color:var(--neon-purple);box-shadow:0 0 10px rgba(160,32,240,0.5);background:linear-gradient(135deg,rgba(160,32,240,0.12),rgba(160,32,240,0.06));}
 .mode-btn.active.solo{border-color:var(--neon-green);color:var(--neon-green);box-shadow:var(--glow-green);background:linear-gradient(135deg,rgba(0,255,136,0.12),rgba(0,200,50,0.06));}
+.mode-btn.active.sprint{border-color:var(--neon-yellow);color:var(--neon-yellow);box-shadow:var(--glow-yellow);background:linear-gradient(135deg,rgba(255,230,0,0.12),rgba(255,170,0,0.06));}
 .mode-desc{font-size:0.65rem;color:var(--text-dim);text-align:center;margin-bottom:16px;min-height:16px;letter-spacing:0.5px;}
 
 /* ==================== ENHANCED MAGIC EFFECTS ==================== */
@@ -482,6 +488,11 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
           Solo Quest
           <span class="mode-label">vs Sifir Tower</span>
         </button>
+        <button class="mode-btn sprint" data-mode="sprint">
+          <span class="mode-icon">⏱</span>
+          Sprint
+          <span class="mode-label">1-Min Blitz</span>
+        </button>
       </div>
       <div class="mode-desc" id="mode-desc">Fight against other players. Last one standing wins!</div>
     </div>
@@ -587,6 +598,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
   <div class="question-stage" id="question-stage">
     <div class="current-turn">Turn: <span class="turn-name" id="turn-name">-</span></div>
     <div class="hint-display" id="hint-display"></div>
+    <div class="sprint-timer" id="sprint-timer">1:00</div>
     <div class="question-display" id="question-display">Waiting for game to start...</div>
     <div class="timer-bar-outer"><div class="timer-bar-inner" id="timer-bar" style="width:100%"></div></div>
     <div class="timer-text" id="timer-text">-</div>
@@ -661,7 +673,10 @@ var STATE = {
   timerInterval: null,
   timeLeft: 0,
   gameMode: 'ffa',
-  settings: { timer: 20, sifir: 0, difficulty: 'random' }
+  settings: { timer: 20, sifir: 0, difficulty: 'random' },
+  sprintInterval: null,
+  sprintTimeLeft: 60,
+  isSprint: false
 };
 
 var CARD_POOL = [
@@ -1326,6 +1341,8 @@ function updateModeDesc(mode) {
   } else if (mode === 'solo') {
     desc.textContent = 'Face the Sifir Tower alone. Answer correctly to destroy the tower!';
     document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
+  } else if (mode === 'sprint') {
+    desc.textContent = '60-second blitz! Answer as many as you can. Most correct wins!';
   } else {
     desc.textContent = 'Fight against other players. Last one standing wins!';
   }
@@ -1336,6 +1353,7 @@ function initModeToggle() {
   var ffaBtn = document.querySelector('.mode-btn.ffa');
   var towerBtn = document.querySelector('.mode-btn.tower');
   var soloBtn = document.querySelector('.mode-btn.solo');
+  var sprintBtn = document.querySelector('.mode-btn.sprint');
   if (!ffaBtn || !towerBtn || !soloBtn) return;
 
   function setMode(mode) {
@@ -1343,13 +1361,13 @@ function initModeToggle() {
     ffaBtn.classList.toggle('active', mode === 'ffa');
     towerBtn.classList.toggle('active', mode === 'tower');
     soloBtn.classList.toggle('active', mode === 'solo');
+    if (sprintBtn) sprintBtn.classList.toggle('active', mode === 'sprint');
     updateModeDesc(mode);
     updateWarriorDisplay(mode);
-    // Toggle UI sections for solo vs multiplayer
     var isSolo = mode === 'solo';
-    document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
+    var isSprint = mode === 'sprint';
+    document.getElementById('btn-create').style.display = (isSolo) ? 'none' : '';
     document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
-    document.getElementById('join-section').style.display = isSolo ? 'none' : '';
     document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
     document.getElementById('connect-status').style.display = isSolo ? 'none' : '';
     document.getElementById('solo-high-score').style.display = isSolo ? '' : 'none';
@@ -1358,6 +1376,13 @@ function initModeToggle() {
         document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
       } catch(e) {}
     }
+  }
+
+  ffaBtn.addEventListener('click', function () { setMode('ffa'); });
+  towerBtn.addEventListener('click', function () { setMode('tower'); });
+  soloBtn.addEventListener('click', function () { setMode('solo'); });
+  if (sprintBtn) sprintBtn.addEventListener('click', function () { setMode('sprint'); });
+}
   }
 
   ffaBtn.addEventListener('click', function () { setMode('ffa'); });
@@ -1433,9 +1458,16 @@ function handleMessage(msg) {
       STATE.players = msg.players;
       STATE.yourCards = msg.yourCards;
       STATE.battleActive = true;
-      // Update UI
+      STATE.isSprint = !!msg.sprint;
       updateAllUI();
-      // Show VS overlay with cards
+      if (STATE.isSprint) {
+        document.getElementById('sprint-timer').classList.add('show');
+        // Hide HP bars and magic cards in sprint
+        var hpSections = document.querySelectorAll('.hp-section');
+        var magicSections = document.querySelectorAll('.magic-cards-section');
+        hpSections.forEach(function (el) { el.style.display = 'none'; });
+        magicSections.forEach(function (el) { el.style.display = 'none'; });
+      }
       showVSOverlay();
       break;
 
@@ -1445,29 +1477,39 @@ function handleMessage(msg) {
       STATE.currentQuestion = msg.question;
       document.getElementById('hdr-round').textContent = msg.round;
       document.getElementById('round-num').textContent = msg.round;
-      // Update active fighter
-      var mySide = STATE.you === 0 ? 'left' : 'right';
-      var oppSide = STATE.you === 0 ? 'right' : 'left';
-      var isMyTurn = STATE.currentPlayer === STATE.you;
-      document.getElementById('fighter-left').classList.toggle('active', STATE.currentPlayer === 0);
-      document.getElementById('fighter-right').classList.toggle('active', STATE.currentPlayer === 1);
-      // Turn name
-      document.getElementById('turn-name').textContent = STATE.players[STATE.currentPlayer].name + (isMyTurn ? ' (You)' : '');
-      // Question
-      document.getElementById('question-display').textContent = msg.question.a + ' x ' + msg.question.b + ' = ?';
-      document.getElementById('answer-input').value = '';
-      document.getElementById('feedback-msg').textContent = '';
-      document.getElementById('feedback-msg').className = 'feedback-msg';
-      document.getElementById('hint-display').textContent = '';
-      // Enable/disable input
-      document.getElementById('answer-input').disabled = !isMyTurn;
-      document.getElementById('btn-attack').disabled = !isMyTurn;
-      if (isMyTurn) document.getElementById('answer-input').focus();
-      // Sound
-      Sound.roundStart();
-      // Start local timer display
-      startTimerDisplay(msg.timer);
-      updateCardInteractivity();
+      if (msg.sprint) {
+        // Sprint: both players answer simultaneously, always your turn
+        document.getElementById('turn-name').textContent = STATE.players[STATE.you].name + ' (You)';
+        document.getElementById('question-display').textContent = msg.question.a + ' x ' + msg.question.b + ' = ?';
+        document.getElementById('answer-input').value = '';
+        document.getElementById('feedback-msg').textContent = '';
+        document.getElementById('feedback-msg').className = 'feedback-msg';
+        document.getElementById('hint-display').textContent = '';
+        document.getElementById('answer-input').disabled = false;
+        document.getElementById('btn-attack').disabled = false;
+        document.getElementById('answer-input').focus();
+        Sound.roundStart();
+        startTimerDisplay(msg.timer);
+      } else {
+        // Normal turn-based
+        var mySide = STATE.you === 0 ? 'left' : 'right';
+        var oppSide = STATE.you === 0 ? 'right' : 'left';
+        var isMyTurn = STATE.currentPlayer === STATE.you;
+        document.getElementById('fighter-left').classList.toggle('active', STATE.currentPlayer === 0);
+        document.getElementById('fighter-right').classList.toggle('active', STATE.currentPlayer === 1);
+        document.getElementById('turn-name').textContent = STATE.players[STATE.currentPlayer].name + (isMyTurn ? ' (You)' : '');
+        document.getElementById('question-display').textContent = msg.question.a + ' x ' + msg.question.b + ' = ?';
+        document.getElementById('answer-input').value = '';
+        document.getElementById('feedback-msg').textContent = '';
+        document.getElementById('feedback-msg').className = 'feedback-msg';
+        document.getElementById('hint-display').textContent = '';
+        document.getElementById('answer-input').disabled = !isMyTurn;
+        document.getElementById('btn-attack').disabled = !isMyTurn;
+        if (isMyTurn) document.getElementById('answer-input').focus();
+        Sound.roundStart();
+        startTimerDisplay(msg.timer);
+        updateCardInteractivity();
+      }
       break;
 
     case 'newQuestion':
@@ -1483,7 +1525,28 @@ function handleMessage(msg) {
       stopTimerDisplay();
       var isMyAnswer = msg.playerIdx === STATE.you;
       var answererName = STATE.players[msg.playerIdx].name;
-      if (msg.correct) {
+      if (msg.sprint) {
+        // Sprint: just update feedback, re-enable input for next question
+        if (msg.correct) {
+          document.getElementById('feedback-msg').textContent = '✓ CORRECT!';
+          document.getElementById('feedback-msg').className = 'feedback-msg correct';
+          Sound.correct();
+          var sprintTarget = msg.playerIdx === 0 ? 'fighter-right' : 'fighter-left';
+          spawnImpactBurst(sprintTarget);
+        } else {
+          document.getElementById('feedback-msg').textContent = '✗ WRONG! Answer: ' + msg.answer;
+          document.getElementById('feedback-msg').className = 'feedback-msg wrong';
+          Sound.wrong();
+          var sprintSelf = msg.playerIdx === 0 ? 'fighter-left' : 'fighter-right';
+          document.getElementById(sprintSelf).classList.add('shake', 'flash-red');
+          setTimeout(function () { document.getElementById(sprintSelf).classList.remove('shake', 'flash-red'); }, 400);
+        }
+        // Re-enable input immediately for next question
+        document.getElementById('answer-input').disabled = false;
+        document.getElementById('btn-attack').disabled = false;
+        document.getElementById('answer-input').value = '';
+        document.getElementById('answer-input').focus();
+      } else if (msg.correct) {
         if (isMyAnswer) {
           document.getElementById('feedback-msg').textContent = 'CORRECT! -' + msg.damage + ' HP' + (msg.bonusMsg || '');
         } else {
@@ -1525,7 +1588,15 @@ function handleMessage(msg) {
       stopTimerDisplay();
       var timeoutName = STATE.players[msg.playerIdx].name;
       var isMyTimeout = msg.playerIdx === STATE.you;
-      if (msg.secondChance) {
+      if (msg.sprint) {
+        document.getElementById('feedback-msg').textContent = '⏱ TIME OUT! Answer: ' + msg.answer;
+        document.getElementById('feedback-msg').className = 'feedback-msg timeout';
+        Sound.timeout();
+        document.getElementById('answer-input').disabled = false;
+        document.getElementById('btn-attack').disabled = false;
+        document.getElementById('answer-input').value = '';
+        document.getElementById('answer-input').focus();
+      } else if (msg.secondChance) {
         document.getElementById('feedback-msg').textContent = (isMyTimeout ? 'TIME OUT!' : timeoutName + ' timed out!') + ' But Second Chance saved! Answer: ' + msg.answer;
         document.getElementById('feedback-msg').className = 'feedback-msg card';
         Sound.shieldBlock();
@@ -1580,9 +1651,24 @@ function handleMessage(msg) {
       }
       break;
 
+    case 'sprintTick':
+      var sprintEl = document.getElementById('sprint-timer');
+      if (sprintEl) {
+        var mins = Math.floor(msg.timeLeft / 60);
+        var secs = msg.timeLeft % 60;
+        sprintEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+        if (msg.timeLeft <= 10) sprintEl.classList.add('warning'); else sprintEl.classList.remove('warning');
+      }
+      STATE.sprintTimeLeft = msg.timeLeft;
+      break;
+
     case 'gameOver':
       STATE.battleActive = false;
       stopTimerDisplay();
+      if (STATE.isSprint) {
+        document.getElementById('sprint-timer').classList.remove('show');
+        document.getElementById('sprint-timer').textContent = '0:00';
+      }
       var isWinner = msg.winnerIdx === STATE.you;
       Sound.winner();
       document.getElementById('winner-name').textContent = msg.winnerName + (isWinner ? ' (You)' : '');
@@ -1645,10 +1731,16 @@ function showVSOverlay() {
   document.getElementById('vs-name-right').textContent = p2Name;
   document.getElementById('vs-avatar-left').textContent = p1Name.charAt(0).toUpperCase();
   document.getElementById('vs-avatar-right').textContent = p2Name.charAt(0).toUpperCase();
-  // Show cards
+  // Show cards (skip for sprint mode — no cards)
   var cardsDisplay = document.getElementById('vs-cards-display');
   cardsDisplay.innerHTML = '';
-  // Your cards
+  if (STATE.isSprint) {
+    var sprintLabel = document.createElement('div');
+    sprintLabel.style.cssText = 'font-size:1.2rem;color:var(--neon-yellow);text-shadow:var(--glow-yellow);text-transform:uppercase;letter-spacing:3px;';
+    sprintLabel.textContent = '⏱ 60-Second Sprint!';
+    cardsDisplay.appendChild(sprintLabel);
+  } else {
+  } else {
   var mySide = document.createElement('div');
   mySide.className = 'vs-cards-side';
   mySide.innerHTML = '<div class="vs-cards-label">Your Cards</div>';
@@ -1678,6 +1770,7 @@ function showVSOverlay() {
   }
   oppSide.appendChild(oppRow);
   cardsDisplay.appendChild(oppSide);
+  }
   document.getElementById('bg-layer').style.display = 'none';
   document.getElementById('warriors-bg').style.display = 'none';
   document.getElementById('vs-overlay').classList.add('show');
@@ -1710,6 +1803,10 @@ function startTimerDisplay(timerDuration) {
       updateTimerDisplay();
       if (STATE.gameMode === 'solo' && STATE.battleActive) {
         soloHandleTimeout();
+      } else if (STATE.isSprint && STATE.battleActive) {
+        send({ type: 'sprintTimeout' });
+        document.getElementById('answer-input').disabled = true;
+        document.getElementById('btn-attack').disabled = true;
       }
       return;
     }
@@ -1767,6 +1864,7 @@ function goHome() {
   if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) ws.close();
   stopTimerDisplay();
   STATE.battleActive = false;
+  STATE.isSprint = false;
   STATE.round = 0;
   STATE.currentQuestion = null;
   STATE.players = [];
@@ -1779,7 +1877,13 @@ function goHome() {
   document.getElementById('winner-overlay').classList.remove('show');
   document.getElementById('disconnect-overlay').classList.remove('show');
   document.getElementById('countdown-overlay').classList.remove('show');
+  document.getElementById('sprint-timer').classList.remove('show', 'warning');
   document.getElementById('connect-status').textContent = '';
+  // Restore HP and magic cards sections
+  var hpSections = document.querySelectorAll('.hp-section');
+  var magicSections = document.querySelectorAll('.magic-cards-section');
+  hpSections.forEach(function (el) { el.style.display = ''; });
+  magicSections.forEach(function (el) { el.style.display = ''; });
   Sound.click();
 }
 
@@ -2119,7 +2223,7 @@ function initEventListeners() {
 
   // Enter key in answer input
   document.getElementById('answer-input').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && STATE.battleActive && STATE.currentPlayer === STATE.you) {
+    if (e.key === 'Enter' && STATE.battleActive && (STATE.currentPlayer === STATE.you || STATE.isSprint)) {
       var answer = document.getElementById('answer-input').value;
       if (STATE.gameMode === 'solo') {
         soloHandleAnswer(answer);
