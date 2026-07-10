@@ -254,6 +254,18 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .impact-spark{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:100;animation:impactBurst 0.6s ease-out forwards;box-shadow:0 0 6px currentColor;}
 @keyframes impactBurst{0%{opacity:1;transform:translate(0,0) scale(1.2);}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0.2);}}
 
+/* COUNTDOWN OVERLAY */
+.countdown-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,15,0.92);display:none;align-items:center;justify-content:center;z-index:1001;}
+.countdown-overlay.show{display:flex;}
+.countdown-number{font-size:6rem;font-weight:bold;color:var(--neon-cyan);text-shadow:0 0 40px rgba(0,240,255,0.6);animation:countdownPop 0.7s ease;}
+.countdown-number.fight{font-size:7rem;color:var(--neon-yellow);text-shadow:0 0 50px rgba(255,230,0,0.7);letter-spacing:6px;}
+@keyframes countdownPop{0%{transform:scale(0.3);opacity:0;}30%{transform:scale(1.2);opacity:1;}70%{transform:scale(1);opacity:1;}100%{transform:scale(0.8);opacity:0;}}
+
+/* EXIT BUTTON */
+.btn-exit{position:fixed;top:12px;left:12px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-red);font-size:1.2rem;cursor:pointer;z-index:500;display:none;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:0 0 8px rgba(255,46,99,0.3);}
+.btn-exit:hover{transform:scale(1.1);border-color:var(--neon-red);}
+.btn-exit.show{display:flex;}
+
 /* POWER EFFECTS */
 .power-effect{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;border-radius:var(--radius);overflow:hidden;}
 .pe-flash{animation:peFlash 0.6s ease forwards;}
@@ -405,6 +417,13 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
   <canvas id="particle-canvas"></canvas>
 </div>
 <div id="screen-flash"></div>
+
+<button class="btn-exit" id="btn-exit" title="Quit to Home">🏠</button>
+
+<!-- COUNTDOWN OVERLAY -->
+<div class="countdown-overlay" id="countdown-overlay">
+  <div class="countdown-number" id="countdown-number">3</div>
+</div>
 
 <!-- CHARACTERS: HERO (left) vs RAKSASA SIFIR (right) -->
 <div id="warriors-bg">
@@ -1038,11 +1057,11 @@ function startSoloGame() {
   document.getElementById('connect-screen').style.display = 'none';
   document.getElementById('game-layout').classList.add('show');
   document.getElementById('header-info').classList.add('show');
+  document.getElementById('btn-exit').classList.add('show');
 
   updateAllUI();
-  Sound.startFight();
 
-  setTimeout(function () { soloNextTurn(); }, 2000);
+  startCountdown(function () { soloNextTurn(); });
 }
 
 function dealCards() {
@@ -1669,7 +1688,9 @@ function showVSOverlay() {
     document.getElementById('connect-screen').style.display = 'none';
     document.getElementById('game-layout').classList.add('show');
     document.getElementById('header-info').classList.add('show');
-    Sound.startFight();
+    document.getElementById('btn-exit').classList.add('show');
+    updateAllUI();
+    startCountdown(function () { Sound.startFight(); });
   }, 3000);
 }
 
@@ -1713,6 +1734,53 @@ function updateTimerDisplay() {
 
 function stopTimerDisplay() {
   clearInterval(STATE.timerInterval);
+}
+
+/* ==================== COUNTDOWN ==================== */
+function startCountdown(callback) {
+  var overlay = document.getElementById('countdown-overlay');
+  var num = document.getElementById('countdown-number');
+  if (!overlay || !num) { callback(); return; }
+  overlay.classList.add('show');
+  var seq = ['3', '2', '1', 'FIGHT!'];
+  var i = 0;
+  function tick() {
+    if (i >= seq.length) {
+      overlay.classList.remove('show');
+      callback();
+      return;
+    }
+    num.textContent = seq[i];
+    num.className = 'countdown-number' + (seq[i] === 'FIGHT!' ? ' fight' : '');
+    num.style.animation = 'none';
+    void num.offsetWidth;
+    num.style.animation = '';
+    if (seq[i] === 'FIGHT!') Sound.startFight(); else Sound.click();
+    i++;
+    setTimeout(tick, seq[i - 1] === 'FIGHT!' ? 900 : 700);
+  }
+  tick();
+}
+
+/* ==================== GO HOME ==================== */
+function goHome() {
+  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) ws.close();
+  stopTimerDisplay();
+  STATE.battleActive = false;
+  STATE.round = 0;
+  STATE.currentQuestion = null;
+  STATE.players = [];
+  document.getElementById('game-layout').classList.remove('show');
+  document.getElementById('connect-screen').style.display = '';
+  document.getElementById('header-info').classList.remove('show');
+  document.getElementById('btn-exit').classList.remove('show');
+  document.getElementById('bg-layer').style.display = '';
+  document.getElementById('warriors-bg').style.display = '';
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('disconnect-overlay').classList.remove('show');
+  document.getElementById('countdown-overlay').classList.remove('show');
+  document.getElementById('connect-status').textContent = '';
+  Sound.click();
 }
 
 /* ==================== UI UPDATE ==================== */
@@ -2099,13 +2167,17 @@ function initEventListeners() {
     }
   });
   document.getElementById('winner-close').addEventListener('click', function () {
-    Sound.click();
-    document.getElementById('winner-overlay').classList.remove('show');
+    goHome();
   });
 
   // Disconnect close
   document.getElementById('disconnect-close').addEventListener('click', function () {
-    location.reload();
+    goHome();
+  });
+
+  // Exit to home
+  document.getElementById('btn-exit').addEventListener('click', function () {
+    goHome();
   });
 }
 
