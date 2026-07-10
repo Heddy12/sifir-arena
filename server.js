@@ -150,7 +150,7 @@ function createRoom(playerId, settings) {
     questionStartTime: 0,
     battleActive: false,
     sprintInterval: null,
-    sprintTimeLeft: 60,
+    sprintTimeLeft: SPRINT_DURATION,
     sprintQuestions: [null, null]
   };
   players[playerId].roomCode = code;
