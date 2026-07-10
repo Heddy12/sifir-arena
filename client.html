@@ -306,34 +306,34 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 .floating-card.cat-utility{color:var(--neon-yellow);border-color:var(--neon-yellow);}
 .floating-card.cat-recovery{color:var(--neon-purple);border-color:var(--neon-purple);}
 
-/* ==================== CHARACTERS (ICE GIRL / FIRE BOY) ==================== */
+/* ==================== CHARACTERS (HERO / RAKSASA SIFIR) ==================== */
 #warriors-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
 .character{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;width:300px;}
-.character.ice-girl{right:4%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
-.character.fire-boy{left:4%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
-@keyframes charFloatIce{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
-@keyframes charFloatFire{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
+.character.hero{left:4%;bottom:50%;transform:translateY(50%);animation:charFloatHero 4s ease-in-out infinite;}
+.character.monster{right:4%;bottom:50%;transform:translateY(50%);animation:charFloatMonster 4s ease-in-out infinite;}
+@keyframes charFloatHero{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
+@keyframes charFloatMonster{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
 .char-platform{position:absolute;top:55%;left:50%;width:320px;height:320px;transform:translate(-50%,-50%);border-radius:50%;z-index:0;opacity:0.95;}
-.char-platform.ice{background:radial-gradient(circle,rgba(0,240,255,0.40) 0%,rgba(0,240,255,0.18) 45%,rgba(0,240,255,0.04) 70%,transparent 78%);box-shadow:0 0 60px rgba(0,240,255,0.35),inset 0 0 60px rgba(0,240,255,0.15);animation:iceShimmer 3s ease-in-out infinite alternate;}
-.char-platform.fire{background:radial-gradient(circle,rgba(255,107,0,0.42) 0%,rgba(255,46,99,0.18) 45%,rgba(255,46,99,0.04) 70%,transparent 78%);box-shadow:0 0 60px rgba(255,107,0,0.35),inset 0 0 60px rgba(255,46,99,0.15);animation:fireFlicker 0.4s ease-in-out infinite alternate;}
-@keyframes iceShimmer{from{opacity:0.7;transform:translate(-50%,-50%) scale(0.95);}to{opacity:1;transform:translate(-50%,-50%) scale(1.05);}}
-@keyframes fireFlicker{from{opacity:0.75;transform:translate(-50%,-50%) scale(0.92) rotate(-3deg);}to{opacity:1;transform:translate(-50%,-50%) scale(1.08) rotate(3deg);}}
+.char-platform.hero{background:radial-gradient(circle,rgba(255,215,0,0.42) 0%,rgba(0,240,255,0.18) 45%,rgba(0,240,255,0.04) 70%,transparent 78%);box-shadow:0 0 60px rgba(255,215,0,0.35),inset 0 0 60px rgba(0,240,255,0.15);animation:heroShimmer 3s ease-in-out infinite alternate;}
+.char-platform.monster{background:radial-gradient(circle,rgba(160,32,240,0.45) 0%,rgba(255,46,99,0.18) 45%,rgba(255,46,99,0.04) 70%,transparent 78%);box-shadow:0 0 60px rgba(160,32,240,0.35),inset 0 0 60px rgba(255,46,99,0.15);animation:monsterPulse 0.5s ease-in-out infinite alternate;}
+@keyframes heroShimmer{from{opacity:0.7;transform:translate(-50%,-50%) scale(0.95);}to{opacity:1;transform:translate(-50%,-50%) scale(1.05);}}
+@keyframes monsterPulse{from{opacity:0.75;transform:translate(-50%,-50%) scale(0.92) rotate(-3deg);}to{opacity:1;transform:translate(-50%,-50%) scale(1.08) rotate(3deg);}}
 .char-aura{position:absolute;top:50%;left:50%;width:360px;height:360px;transform:translate(-50%,-50%);border-radius:50%;z-index:-1;filter:blur(30px);opacity:0.6;}
-.char-aura.ice{background:radial-gradient(circle,rgba(0,240,255,0.5) 0%,rgba(0,240,255,0.12) 40%,transparent 70%);}
-.char-aura.fire{background:radial-gradient(circle,rgba(255,107,0,0.5) 0%,rgba(255,46,99,0.18) 40%,transparent 70%);}
+.char-aura.hero{background:radial-gradient(circle,rgba(255,215,0,0.45) 0%,rgba(0,240,255,0.12) 40%,transparent 70%);}
+.char-aura.monster{background:radial-gradient(circle,rgba(160,32,240,0.5) 0%,rgba(255,46,99,0.18) 40%,transparent 70%);}
 .char-img{width:300px;height:auto;max-height:430px;position:relative;z-index:1;filter:drop-shadow(0 0 16px rgba(0,0,0,0.7));}
 .char-emoji{font-size:8rem;line-height:1;position:relative;z-index:1;filter:drop-shadow(0 0 18px currentColor);display:none;align-items:center;justify-content:center;}
-.character.ice-girl .char-emoji{color:var(--neon-cyan);}
-.character.fire-boy .char-emoji{color:var(--neon-orange);}
+.character.hero .char-emoji{color:var(--neon-yellow);}
+.character.monster .char-emoji{color:var(--neon-purple);}
 .held-cards{display:flex;gap:6px;margin-top:12px;z-index:2;position:relative;}
 .held-number{width:62px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:bold;background:var(--bg-card-2);border:2px solid var(--neon-yellow);color:var(--neon-yellow);box-shadow:0 0 12px rgba(255,230,0,0.35);}
 .held-magic{width:46px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:bold;text-transform:uppercase;background:rgba(19,19,31,0.85);border:2px solid var(--neon-red);color:var(--neon-red);box-shadow:0 0 12px rgba(255,46,99,0.35);}
 .char-label{font-size:0.7rem;text-transform:uppercase;letter-spacing:2px;margin-top:10px;color:var(--text-dim);}
-.character.ice-girl .char-label{color:var(--neon-cyan);}
-.character.fire-boy .char-label{color:var(--neon-orange);}
+.character.hero .char-label{color:var(--neon-yellow);}
+.character.monster .char-label{color:var(--neon-purple);}
 .char-hp{font-size:0.6rem;margin-top:4px;letter-spacing:1px;}
-.character.ice-girl .char-hp{color:var(--neon-cyan);}
-.character.fire-boy .char-hp{color:var(--neon-orange);}
+.character.hero .char-hp{color:var(--neon-yellow);}
+.character.monster .char-hp{color:var(--neon-purple);}
 #vs-lightning{position:absolute;font-size:4rem;font-weight:bold;color:var(--neon-yellow);text-shadow:0 0 40px rgba(255,230,0,0.6),0 0 80px rgba(255,230,0,0.3);animation:vsPulse 1s ease infinite alternate;z-index:1;}
 
 /* ==================== GLASSMORPHISM CONNECT CARD ==================== */
@@ -375,8 +375,8 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
   .char-emoji{font-size:4rem;}
   .char-platform{width:165px;height:165px;}
   .char-aura{width:190px;height:190px;}
-  .character.ice-girl{right:1%;}
-  .character.fire-boy{left:1%;}
+  .character.hero{left:1%;}
+  .character.monster{right:1%;}
   #vs-lightning{font-size:2.5rem;}
 }
 </style>
@@ -401,33 +401,33 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 </div>
 <div id="screen-flash"></div>
 
-<!-- CHARACTERS: FIRE BOY art left (label ICE GIRL), ICE GIRL art right (label FIRE BOY) -->
+<!-- CHARACTERS: HERO (left) vs RAKSASA SIFIR (right) -->
 <div id="warriors-bg">
-  <div class="character ice-girl" id="char-ice">
-    <div class="char-aura ice"></div>
-    <div class="char-platform ice"></div>
-    <img class="char-img" id="img-ice" src="images/ice-girl.png" alt="Ice Girl" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-    <div class="char-emoji">❄️🧚</div>
+  <div class="character hero" id="char-hero">
+    <div class="char-aura hero"></div>
+    <div class="char-platform hero"></div>
+    <img class="char-img" id="img-hero" src="images/hero.png" alt="Hero" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="char-emoji">🦸</div>
     <div class="held-cards">
-      <div class="held-number" id="ice-number">3×4</div>
-      <div class="held-magic" id="ice-magic">X2</div>
+      <div class="held-number" id="hero-number">3×4</div>
+      <div class="held-magic" id="hero-magic">X2</div>
     </div>
-    <div class="char-label">FIRE BOY</div>
-    <div class="char-hp" id="ice-hp">HP 100</div>
+    <div class="char-label">HERO</div>
+    <div class="char-hp" id="hero-hp">HP 100</div>
   </div>
 
   <div id="vs-lightning">⚡</div>
-  <div class="character fire-boy" id="char-fire">
-    <div class="char-aura fire"></div>
-    <div class="char-platform fire"></div>
-    <img class="char-img" id="img-fire" src="images/fire-boy.png" alt="Fire Boy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-    <div class="char-emoji">🔥🧙</div>
+  <div class="character monster" id="char-monster">
+    <div class="char-aura monster"></div>
+    <div class="char-platform monster"></div>
+    <img class="char-img" id="img-monster" src="images/monster.png" alt="Raksasa Sifir" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+    <div class="char-emoji">👹</div>
     <div class="held-cards">
-      <div class="held-number" id="fire-number">12</div>
-      <div class="held-magic" id="fire-magic">SH</div>
+      <div class="held-number" id="monster-number">12</div>
+      <div class="held-magic" id="monster-magic">SH</div>
     </div>
-    <div class="char-label">ICE GIRL</div>
-    <div class="char-hp" id="fire-hp">HP 200</div>
+    <div class="char-label">RAKSASA SIFIR</div>
+    <div class="char-hp" id="monster-hp">HP 200</div>
   </div>
 </div>
 
@@ -968,34 +968,34 @@ function drawLightning(ctx) {
 }
 
 function updateWarriorDisplay(mode) {
-  var iceNum = document.getElementById('ice-number');
-  var fireNum = document.getElementById('fire-number');
-  var iceHp = document.getElementById('ice-hp');
-  var fireHp = document.getElementById('fire-hp');
-  if (!iceNum || !fireNum) return;
+  var heroNum = document.getElementById('hero-number');
+  var monsterNum = document.getElementById('monster-number');
+  var heroHp = document.getElementById('hero-hp');
+  var monsterHp = document.getElementById('monster-hp');
+  if (!heroNum || !monsterNum) return;
   if (mode === 'tower' || mode === 'solo') {
-    iceNum.textContent = '3×4';
-    fireNum.textContent = '12';
-    iceHp.textContent = 'HP 100';
-    fireHp.textContent = 'HP 200';
+    heroNum.textContent = '3×4';
+    monsterNum.textContent = '12';
+    heroHp.textContent = 'HP 100';
+    monsterHp.textContent = 'HP 200';
   } else {
     var a = 5 + Math.floor(Math.random() * 7);
     var b = 2 + Math.floor(Math.random() * 6);
-    iceNum.textContent = a + '×' + b;
-    fireNum.textContent = a * b;
-    iceHp.textContent = 'HP 100';
-    fireHp.textContent = 'HP 100';
+    heroNum.textContent = a + '×' + b;
+    monsterNum.textContent = a * b;
+    heroHp.textContent = 'HP 100';
+    monsterHp.textContent = 'HP 100';
   }
 }
 
 function initHeldMagicCards() {
   var icons = ['X2', 'SH', 'TF', 'HP', 'RH', 'SQ', 'ST', 'SC', 'SB', 'MS'];
-  var iceMagic = document.getElementById('ice-magic');
-  var fireMagic = document.getElementById('fire-magic');
-  if (!iceMagic || !fireMagic) return;
+  var heroMagic = document.getElementById('hero-magic');
+  var monsterMagic = document.getElementById('monster-magic');
+  if (!heroMagic || !monsterMagic) return;
   setInterval(function () {
-    iceMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
-    fireMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
+    heroMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
+    monsterMagic.textContent = icons[Math.floor(Math.random() * icons.length)];
   }, 3000);
 }
 
