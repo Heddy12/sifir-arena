@@ -27,13 +27,15 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Consolas','C
 /* HEADER */
 header{text-align:center;padding:6px 16px;background:linear-gradient(180deg,var(--bg-card) 0%,var(--bg) 100%);border-bottom:2px solid var(--neon-cyan);box-shadow:0 2px 20px rgba(0,240,255,0.2);}
 header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text-transform:uppercase;}
+#header-subtitle.hide{display:none;}
 .header-info{display:none;justify-content:center;gap:16px;margin-top:8px;flex-wrap:wrap;}
 .header-info.show{display:flex;}
 .header-info .chip{font-size:0.7rem;padding:3px 14px;border:1px solid var(--border);border-radius:20px;color:var(--text-dim);background:var(--bg-card-2);}
 .header-info .chip span{color:var(--neon-cyan);font-weight:bold;}
 
 /* CONNECT SCREEN */
-.connect-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:82vh;gap:24px;padding:20px;}
+.connect-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:82vh;gap:24px;padding:20px;}
+.connect-screen.show{display:flex;}
 .connect-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:28px 30px;max-width:430px;width:100%;text-align:center;}
 .connect-section{margin-bottom:14px;text-align:left;}
 .connect-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:8px;font-weight:bold;}
@@ -371,6 +373,36 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .character.monster .char-hp{color:var(--neon-purple);}
 #vs-lightning{position:absolute;font-size:4rem;font-weight:bold;color:var(--neon-yellow);text-shadow:0 0 40px rgba(255,230,0,0.6),0 0 80px rgba(255,230,0,0.3);animation:vsPulse 1s ease infinite alternate;z-index:1;}
 
+/* ==================== LANDING SCREEN ==================== */
+.landing-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;z-index:2;min-height:100vh;padding:20px;gap:20px;text-align:center;}
+.landing-screen.hide{display:none;}
+.landing-title{max-width:360px;width:85%;height:auto;filter:drop-shadow(0 0 30px rgba(0,240,255,0.25)) drop-shadow(0 8px 24px rgba(0,0,0,0.6));animation:titlePulse 3s ease-in-out infinite alternate;}
+.landing-tagline{font-size:1rem;color:var(--text-dim);letter-spacing:2px;margin-top:-10px;text-transform:uppercase;}
+.landing-divider{font-size:0.7rem;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;position:relative;display:flex;align-items:center;gap:12px;margin:4px 0;}
+.landing-divider::before,.landing-divider::after{content:'';flex:1;width:60px;height:1px;background:var(--border);}
+
+.landing-cta{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 32px;border:none;border-radius:10px;background:#fff;color:#333;font-size:1.05rem;font-weight:bold;font-family:inherit;cursor:pointer;box-shadow:0 4px 20px rgba(255,255,255,0.15);transition:all 0.25s;min-width:260px;}
+.landing-cta:hover{transform:translateY(-2px);box-shadow:0 6px 30px rgba(255,255,255,0.25);}
+.landing-cta .google-icon{width:22px;height:22px;background:#4285f4;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:bold;flex-shrink:0;}
+.landing-skip{background:none;border:none;color:var(--text-dim);font-size:0.78rem;font-family:inherit;cursor:pointer;letter-spacing:1px;padding:6px 12px;transition:color 0.2s;}
+.landing-skip:hover{color:var(--text);}
+
+.landing-features{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;}
+.feature-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:130px;max-width:160px;flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:all 0.25s;}
+.feature-card:hover{transform:translateY(-3px);border-color:var(--neon-cyan);box-shadow:var(--glow-cyan);}
+.feature-card .feature-icon{font-size:1.8rem;display:block;}
+.feature-card .feature-title{font-size:0.72rem;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:var(--text);}
+.feature-card .feature-desc{font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;}
+
+.landing-footer{position:absolute;bottom:16px;font-size:0.6rem;color:var(--text-dim);letter-spacing:1px;}
+
+@media(max-width:600px){
+  .landing-features{flex-direction:column;align-items:center;}
+  .feature-card{max-width:220px;width:100%;}
+  .landing-cta{min-width:auto;width:100%;max-width:300px;padding:13px 24px;font-size:0.95rem;}
+  .landing-title{max-width:280px;}
+}
+
 /* ==================== GLASSMORPHISM CONNECT CARD ==================== */
 .title-banner{display:block;width:85%;max-width:320px;height:auto;margin:0 auto 8px;filter:drop-shadow(0 0 16px rgba(0,240,255,0.22)) drop-shadow(0 4px 14px rgba(0,0,0,0.55));animation:titlePulse 3s ease-in-out infinite alternate;z-index:2;}
 .connect-card.modern{background:rgba(19,19,31,0.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 40px rgba(0,240,255,0.08),0 8px 32px rgba(0,0,0,0.4);position:relative;z-index:2;}
@@ -422,7 +454,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 <button class="info-toggle" id="info-toggle" title="Magic Cards Info">?</button>
 
 <header>
-  <div class="subtitle">MULTIPLAYER - FIGHTER EDITION</div>
+  <div class="subtitle" id="header-subtitle">MULTIPLAYER - FIGHTER EDITION</div>
   <div class="header-info" id="header-info">
     <div class="chip">Room: <span id="hdr-room">-</span></div>
     <div class="chip">Timer: <span id="hdr-timer">20s</span></div>
@@ -472,6 +504,40 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
     <div class="char-label">RAKSASA SIFIR</div>
     <div class="char-hp" id="monster-hp">HP 200</div>
   </div>
+</div>
+
+<!-- LANDING SCREEN -->
+<div class="landing-screen" id="landing-screen">
+  <img class="landing-title" src="images/title.png" alt="Sifir Hero Arena" onerror="this.style.display='none';">
+  <div class="landing-tagline">Kuasa Matematik. Arena Pertempuran.</div>
+
+  <button class="landing-cta" id="btn-google-signin">
+    <span class="google-icon">G</span>
+    Main dengan Google
+  </button>
+
+  <div class="landing-divider">atau</div>
+  <button class="landing-skip" id="btn-skip-signin">Main tanpa daftar &rarr;</button>
+
+  <div class="landing-features">
+    <div class="feature-card" data-mode="ffa">
+      <span class="feature-icon">⚔</span>
+      <span class="feature-title">Quick Match</span>
+      <span class="feature-desc">Lawan rambang</span>
+    </div>
+    <div class="feature-card" data-mode="solo">
+      <span class="feature-icon">🏰</span>
+      <span class="feature-title">Solo Quest</span>
+      <span class="feature-desc">Lawan Sifir Tower</span>
+    </div>
+    <div class="feature-card" data-mode="sprint">
+      <span class="feature-icon">⏱</span>
+      <span class="feature-title">Sprint</span>
+      <span class="feature-desc">1-Minit Blitz</span>
+    </div>
+  </div>
+
+  <div class="landing-footer">&copy; 2025 Sifir Hero Arena</div>
 </div>
 
 <!-- CONNECT SCREEN -->
@@ -2014,7 +2080,9 @@ function goHome() {
   STATE.currentQuestion = null;
   STATE.players = [];
   document.getElementById('game-layout').classList.remove('show');
-  document.getElementById('connect-screen').style.display = '';
+  document.getElementById('connect-screen').classList.remove('show');
+  document.getElementById('landing-screen').classList.remove('hide');
+  document.getElementById('header-subtitle').classList.add('hide');
   document.getElementById('header-info').classList.remove('show');
   document.getElementById('btn-exit').classList.remove('show');
   document.getElementById('bg-layer').style.display = '';
@@ -2028,7 +2096,6 @@ function goHome() {
   document.getElementById('room-code-display').textContent = '';
   document.getElementById('room-waiting-status').textContent = 'Waiting for opponent to join...';
   clearWeakTableReport();
-  // Restore HP and magic cards sections
   var hpSections = document.querySelectorAll('.hp-section');
   var magicSections = document.querySelectorAll('.magic-cards-section');
   hpSections.forEach(function (el) { el.style.display = ''; });
@@ -2314,8 +2381,38 @@ function showCardInfo() {
   document.getElementById('info-overlay').classList.add('show');
 }
 
+/* ==================== LANDING PAGE ==================== */
+function showConnectScreen() {
+  document.getElementById('header-subtitle').classList.remove('hide');
+  document.getElementById('landing-screen').classList.add('hide');
+  document.getElementById('connect-screen').classList.add('show');
+  document.getElementById('header-info').classList.add('show');
+  if (!STATE.ws || STATE.ws.readyState > WebSocket.OPEN) connectWebSocket();
+}
+
 /* ==================== EVENT LISTENERS ==================== */
 function initEventListeners() {
+  // Landing: Google sign-in (placeholder)
+  document.getElementById('btn-google-signin').addEventListener('click', function () {
+    Sound.init(); Sound.click();
+    showConnectScreen();
+  });
+  // Landing: Skip sign-in
+  document.getElementById('btn-skip-signin').addEventListener('click', function () {
+    Sound.init(); Sound.click();
+    showConnectScreen();
+  });
+  // Landing: Feature cards
+  document.querySelectorAll('.feature-card').forEach(function (card) {
+    card.addEventListener('click', function () {
+      Sound.init(); Sound.click();
+      var mode = this.getAttribute('data-mode');
+      showConnectScreen();
+      var btn = document.querySelector('.mode-btn.' + mode);
+      if (btn) btn.click();
+    });
+  });
+
   // Create room
   document.getElementById('btn-create').addEventListener('click', function () {
     Sound.init(); Sound.click();
@@ -2440,6 +2537,7 @@ function initEventListeners() {
 
 /* ==================== INIT ==================== */
 function init() {
+  document.getElementById('header-subtitle').classList.add('hide');
   initEventListeners();
   initModeToggle();
   initBackground();
