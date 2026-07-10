@@ -34,8 +34,8 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 
 /* CONNECT SCREEN */
 .connect-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:82vh;gap:24px;padding:20px;}
-.connect-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:36px 32px;max-width:430px;width:100%;text-align:center;}
-.connect-section{margin-bottom:18px;text-align:left;}
+.connect-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:28px 30px;max-width:430px;width:100%;text-align:center;}
+.connect-section{margin-bottom:14px;text-align:left;}
 .connect-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:8px;font-weight:bold;}
 .connect-input{width:100%;padding:11px 14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.95rem;font-family:inherit;transition:border-color 0.2s,box-shadow 0.2s;}
 .connect-input:focus{outline:none;border-color:var(--neon-cyan);box-shadow:0 0 0 3px rgba(0,240,255,0.12);}
@@ -339,7 +339,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 #vs-lightning{position:absolute;font-size:4rem;font-weight:bold;color:var(--neon-yellow);text-shadow:0 0 40px rgba(255,230,0,0.6),0 0 80px rgba(255,230,0,0.3);animation:vsPulse 1s ease infinite alternate;z-index:1;}
 
 /* ==================== GLASSMORPHISM CONNECT CARD ==================== */
-.title-banner{display:block;width:80%;max-width:300px;height:auto;margin:0 auto 8px;filter:drop-shadow(0 0 18px rgba(0,240,255,0.25)) drop-shadow(0 4px 16px rgba(0,0,0,0.6));animation:titlePulse 3s ease-in-out infinite alternate;z-index:2;}
+.title-banner{display:block;width:65%;max-width:200px;height:auto;margin:0 auto 6px;filter:drop-shadow(0 0 14px rgba(0,240,255,0.2)) drop-shadow(0 4px 12px rgba(0,0,0,0.5));animation:titlePulse 3s ease-in-out infinite alternate;z-index:2;}
 .connect-card.modern{background:rgba(19,19,31,0.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(42,42,68,0.5);box-shadow:0 0 40px rgba(0,240,255,0.08),0 8px 32px rgba(0,0,0,0.4);position:relative;z-index:2;}
 .connect-card.modern::before{content:'';position:absolute;inset:-1px;border-radius:12px;padding:1px;background:linear-gradient(135deg,var(--neon-cyan),transparent,var(--neon-purple),transparent,var(--neon-red));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:0.6;animation:borderGlow 4s ease-in-out infinite alternate;}
 @keyframes borderGlow{from{opacity:0.3;}to{opacity:0.8;}}
