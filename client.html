@@ -40,15 +40,22 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .connect-input{width:100%;padding:11px 14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.95rem;font-family:inherit;transition:border-color 0.2s,box-shadow 0.2s;}
 .connect-input:focus{outline:none;border-color:var(--neon-cyan);box-shadow:0 0 0 3px rgba(0,240,255,0.12);}
 .connect-btn{width:100%;padding:13px;border:none;border-radius:8px;font-size:0.88rem;font-weight:bold;text-transform:uppercase;letter-spacing:1.5px;cursor:pointer;font-family:inherit;transition:all 0.2s;margin-top:6px;}
+.connect-btn:disabled{cursor:not-allowed;filter:grayscale(0.7);opacity:0.45;transform:none;box-shadow:none;}
 .btn-create{background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue));color:#000;box-shadow:var(--glow-cyan);}
 .btn-create:hover{filter:brightness(1.15);transform:translateY(-1px);}
 .btn-join{background:linear-gradient(135deg,var(--neon-green),#00cc66);color:#000;box-shadow:var(--glow-green);}
 .btn-join:hover{filter:brightness(1.15);transform:translateY(-1px);}
+.connect-btn:disabled:hover{filter:grayscale(0.7);opacity:0.45;transform:none;box-shadow:none;}
 .connect-divider{display:flex;align-items:center;gap:12px;margin:22px 0;color:var(--text-dim);font-size:0.65rem;text-transform:uppercase;letter-spacing:2px;}
 .connect-divider::before,.connect-divider::after{content:'';flex:1;height:1px;background:var(--border);}
 .join-box{background:var(--bg-card-2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
 .join-box .connect-input{margin-bottom:10px;}
 .room-code-display{font-size:2rem;font-weight:bold;letter-spacing:6px;color:var(--neon-yellow);text-shadow:var(--glow-yellow);padding:16px;background:var(--bg-card-2);border:2px dashed var(--neon-yellow);border-radius:8px;margin:12px 0;}
+.connect-waiting{display:none;text-align:center;}
+.connect-card.waiting>:not(.connect-waiting){display:none!important;}
+.connect-card.waiting>.connect-waiting{display:block;}
+.copy-room-btn{margin-top:4px;padding:10px 18px;border:1px solid var(--neon-cyan);border-radius:7px;background:rgba(0,240,255,0.08);color:var(--neon-cyan);font-family:inherit;font-weight:bold;letter-spacing:1px;text-transform:uppercase;cursor:pointer;}
+.copy-room-btn:hover{background:rgba(0,240,255,0.18);box-shadow:var(--glow-cyan);}
 .connect-status{font-size:0.82rem;color:var(--text-dim);margin-top:10px;min-height:20px;letter-spacing:0.5px;}
 .connect-status.error{color:var(--neon-red);}
 .connect-status.success{color:var(--neon-green);}
@@ -230,7 +237,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .vs-card-mini .card-name{font-size:0.45rem;}
 
 /* WINNER OVERLAY */
-.winner-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,15,0.95);display:none;align-items:center;justify-content:center;z-index:1001;flex-direction:column;gap:20px;animation:fadeIn 0.5s ease;}
+.winner-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,10,15,0.95);display:none;align-items:center;justify-content:center;z-index:1001;flex-direction:column;gap:20px;animation:fadeIn 0.5s ease;overflow-y:auto;padding:24px;box-sizing:border-box;}
 .winner-overlay.show{display:flex;}
 .winner-trophy{font-size:4rem;animation:trophyBounce 0.8s ease infinite alternate;}
 @keyframes trophyBounce{from{transform:translateY(0);}to{transform:translateY(-15px);}}
@@ -240,6 +247,13 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .winner-stat{text-align:center;}
 .winner-stat .ws-label{font-size:0.7rem;color:var(--text-dim);text-transform:uppercase;}
 .winner-stat .ws-value{font-size:1.5rem;font-weight:bold;color:var(--neon-cyan);}
+.weak-report{width:min(560px,92vw);padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);text-align:center;}
+.weak-report-title{font-size:0.75rem;color:var(--neon-yellow);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+.weak-report-grid{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.weak-table-card{min-width:110px;padding:9px 12px;border:1px solid var(--neon-red);border-radius:8px;background:rgba(255,46,99,0.08);}
+.weak-table-name{font-weight:bold;color:var(--neon-red);}
+.weak-table-detail{font-size:0.68rem;color:var(--text-dim);margin-top:4px;}
+.weak-report-good{color:var(--neon-green);font-size:0.8rem;}
 .winner-buttons{display:flex;gap:12px;margin-top:20px;}
 
 /* EFFECTS */
@@ -374,7 +388,6 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .mode-btn .mode-label{font-size:0.6rem;letter-spacing:1px;display:block;margin-top:2px;color:var(--text-dim);}
 .mode-btn.active{border-color:var(--neon-cyan);color:var(--neon-cyan);box-shadow:var(--glow-cyan);background:linear-gradient(135deg,rgba(0,240,255,0.12),rgba(0,128,255,0.06));}
 .mode-btn.active.ffa{border-color:var(--neon-red);color:var(--neon-red);box-shadow:var(--glow-red);background:linear-gradient(135deg,rgba(255,46,99,0.12),rgba(255,46,99,0.06));}
-.mode-btn.active.tower{border-color:var(--neon-purple);color:var(--neon-purple);box-shadow:0 0 10px rgba(160,32,240,0.5);background:linear-gradient(135deg,rgba(160,32,240,0.12),rgba(160,32,240,0.06));}
 .mode-btn.active.solo{border-color:var(--neon-green);color:var(--neon-green);box-shadow:var(--glow-green);background:linear-gradient(135deg,rgba(0,255,136,0.12),rgba(0,200,50,0.06));}
 .mode-btn.active.sprint{border-color:var(--neon-yellow);color:var(--neon-yellow);box-shadow:var(--glow-yellow);background:linear-gradient(135deg,rgba(255,230,0,0.12),rgba(255,170,0,0.06));}
 .mode-desc{font-size:0.65rem;color:var(--text-dim);text-align:center;margin-bottom:16px;min-height:16px;letter-spacing:0.5px;}
@@ -475,17 +488,12 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
       <div class="mode-toggle-group" id="mode-toggle">
         <button class="mode-btn active ffa" data-mode="ffa">
           <span class="mode-icon">⚔</span>
-          Free-for-All
-          <span class="mode-label">vs Players</span>
-        </button>
-        <button class="mode-btn tower" data-mode="tower">
-          <span class="mode-icon">🏰</span>
-          Tower Battle
-          <span class="mode-label">vs CPU Tower</span>
+          Multiplayer
+          <span class="mode-label">vs Player</span>
         </button>
         <button class="mode-btn solo" data-mode="solo">
-          <span class="mode-icon">⚔</span>
-          Solo Quest
+          <span class="mode-icon">🏰</span>
+          Single Player
           <span class="mode-label">vs Sifir Tower</span>
         </button>
         <button class="mode-btn sprint" data-mode="sprint">
@@ -529,15 +537,22 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
         </select>
       </div>
     </div>
-    <button class="connect-btn btn-create" id="btn-create">⚔ Create Room</button>
+    <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
     <div class="connect-divider">or join with code</div>
     <div class="join-box">
       <input type="text" class="connect-input" id="join-code" placeholder="Enter room code" maxlength="6" style="text-transform:uppercase;">
-      <button class="connect-btn btn-join" id="btn-join">🔗 Join Room</button>
+      <button class="connect-btn btn-join" id="btn-join" disabled>🔗 Join Room</button>
     </div>
     <div class="connect-status" id="connect-status"></div>
+    <div class="connect-waiting" id="connect-waiting">
+      <div class="connect-title">Room Created!</div>
+      <div class="connect-label">Share this code with your opponent:</div>
+      <div class="room-code-display" id="room-code-display"></div>
+      <button class="copy-room-btn" id="copy-room-code">Copy Room Code</button>
+      <div class="connect-status success" id="room-waiting-status">Waiting for opponent to join...</div>
+    </div>
   </div>
 </div>
 
@@ -636,6 +651,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
   <div class="winner-label">Winner</div>
   <div class="winner-name" id="winner-name">-</div>
   <div class="winner-stats" id="winner-stats"></div>
+  <div class="weak-report" id="weak-report"></div>
   <div class="winner-buttons">
     <button class="btn-control btn-primary" id="winner-rematch">Rematch</button>
     <button class="btn-control btn-skip" id="winner-close">Close</button>
@@ -676,7 +692,10 @@ var STATE = {
   settings: { timer: 20, sifir: 0, difficulty: 'random' },
   sprintInterval: null,
   sprintTimeLeft: 60,
-  isSprint: false
+  isSprint: false,
+  reconnectTimer: null,
+  reconnectAttempts: 0,
+  learningStats: {}
 };
 
 var CARD_POOL = [
@@ -1037,6 +1056,78 @@ function initHeldMagicCards() {
   }, 3000);
 }
 
+function recordLearningAttempt(question, isCorrect) {
+  if (!question) return;
+  var table = Number(question.table || Math.min(question.a, question.b));
+  if (!STATE.learningStats[table]) {
+    STATE.learningStats[table] = { table: table, correct: 0, wrong: 0, attempts: 0 };
+  }
+  var stats = STATE.learningStats[table];
+  stats.attempts++;
+  if (isCorrect) stats.correct++; else stats.wrong++;
+}
+
+function buildLearningReportFromStats(tableStats) {
+  return Object.keys(tableStats || {}).map(function (key) {
+    var item = tableStats[key];
+    return {
+      table: item.table,
+      correct: item.correct,
+      wrong: item.wrong,
+      attempts: item.attempts,
+      accuracy: item.attempts > 0 ? Math.round((item.correct / item.attempts) * 100) : 0
+    };
+  }).sort(function (a, b) {
+    if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
+    if (a.wrong !== b.wrong) return b.wrong - a.wrong;
+    return a.table - b.table;
+  });
+}
+
+function clearWeakTableReport() {
+  var report = document.getElementById('weak-report');
+  if (report) report.textContent = '';
+}
+
+function renderWeakTableReport(report) {
+  var container = document.getElementById('weak-report');
+  if (!container) return;
+  container.textContent = '';
+
+  var title = document.createElement('div');
+  title.className = 'weak-report-title';
+  title.textContent = 'Learning Report';
+  container.appendChild(title);
+
+  var attempted = Array.isArray(report) ? report.filter(function (item) { return item && item.attempts > 0; }) : [];
+  var weak = attempted.filter(function (item) { return item.wrong > 0 || item.accuracy < 80; }).slice(0, 3);
+
+  if (weak.length === 0) {
+    var good = document.createElement('div');
+    good.className = 'weak-report-good';
+    good.textContent = attempted.length > 0 ? 'Great work! No weak tables detected.' : 'Play a round to discover which tables need practice.';
+    container.appendChild(good);
+    return;
+  }
+
+  var grid = document.createElement('div');
+  grid.className = 'weak-report-grid';
+  weak.forEach(function (item) {
+    var card = document.createElement('div');
+    card.className = 'weak-table-card';
+    var name = document.createElement('div');
+    name.className = 'weak-table-name';
+    name.textContent = 'Sifir ' + item.table;
+    var detail = document.createElement('div');
+    detail.className = 'weak-table-detail';
+    detail.textContent = item.accuracy + '% • ' + item.correct + '/' + item.attempts + ' correct';
+    card.appendChild(name);
+    card.appendChild(detail);
+    grid.appendChild(card);
+  });
+  container.appendChild(grid);
+}
+
 /* ==================== SINGLE PLAYER MODE (SOLO QUEST) ==================== */
 function startSoloGame() {
   var settings = STATE.settings;
@@ -1048,6 +1139,8 @@ function startSoloGame() {
   STATE.currentPlayer = 0;
   STATE.currentQuestion = null;
   STATE.weakQuestions = [];
+  STATE.learningStats = {};
+  clearWeakTableReport();
   STATE.players = [
     { name: document.getElementById('player-name').value.trim() || 'Hero', hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: playerCards, activeEffects: {} },
     { name: 'Sifir Tower', hp: 200, maxHP: 200, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} }
@@ -1151,7 +1244,7 @@ function soloGenerateQuestion() {
   var a, b;
   if (Math.random() < 0.5) { a = sifirNum; b = multiplier; }
   else { a = multiplier; b = sifirNum; }
-  return { a: a, b: b, answer: a * b, isWeak: false };
+  return { a: a, b: b, answer: a * b, isWeak: false, table: sifirNum };
 }
 
 function soloHandleAnswer(answer) {
@@ -1160,8 +1253,10 @@ function soloHandleAnswer(answer) {
   var player = STATE.players[0];
   var opponent = STATE.players[1];
   var userAnswer = parseInt(answer);
+  var isCorrect = !isNaN(userAnswer) && userAnswer === STATE.currentQuestion.answer;
+  recordLearningAttempt(STATE.currentQuestion, isCorrect);
 
-  if (isNaN(userAnswer) || userAnswer !== STATE.currentQuestion.answer) {
+  if (!isCorrect) {
     soloHandleWrong(player);
   } else {
     soloHandleCorrect(player, opponent);
@@ -1238,6 +1333,7 @@ function soloHandleWrong(player) {
 function soloHandleTimeout() {
   if (!STATE.battleActive || !STATE.currentQuestion) return;
   var player = STATE.players[0];
+  recordLearningAttempt(STATE.currentQuestion, false);
 
   if (player.activeEffects.secondChance) {
     player.activeEffects.secondChance = false;
@@ -1288,6 +1384,7 @@ function soloCheckWin() {
         '<div class="winner-stat"><div class="ws-label">Correct</div><div class="ws-value" style="color:var(--neon-green)">' + winner.correct + '</div></div>' +
         '<div class="winner-stat"><div class="ws-label">Wrong</div><div class="ws-value" style="color:var(--neon-red)">' + winner.wrong + '</div></div>' +
         '<div class="winner-stat"><div class="ws-label">Accuracy</div><div class="ws-value" style="color:var(--neon-yellow)">' + acc + '%</div></div>';
+      renderWeakTableReport(buildLearningReportFromStats(STATE.learningStats));
       document.getElementById('winner-overlay').classList.add('show');
 
       // Save high score to localStorage
@@ -1336,9 +1433,7 @@ function soloActivateCard(cardIdx) {
 
 function updateModeDesc(mode) {
   var desc = document.getElementById('mode-desc');
-  if (mode === 'tower') {
-    desc.textContent = 'Work together to defeat the Sifir Tower. Tower grows stronger with more players!';
-  } else if (mode === 'solo') {
+  if (mode === 'solo') {
     desc.textContent = 'Face the Sifir Tower alone. Answer correctly to destroy the tower!';
     document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
   } else if (mode === 'sprint') {
@@ -1354,18 +1449,17 @@ function initModeToggle() {
   var towerBtn = document.querySelector('.mode-btn.tower');
   var soloBtn = document.querySelector('.mode-btn.solo');
   var sprintBtn = document.querySelector('.mode-btn.sprint');
-  if (!ffaBtn || !towerBtn || !soloBtn) return;
+  if (!ffaBtn || !soloBtn) return;
 
   function setMode(mode) {
     STATE.gameMode = mode;
     ffaBtn.classList.toggle('active', mode === 'ffa');
-    towerBtn.classList.toggle('active', mode === 'tower');
+    if (towerBtn) towerBtn.classList.toggle('active', mode === 'tower');
     soloBtn.classList.toggle('active', mode === 'solo');
     if (sprintBtn) sprintBtn.classList.toggle('active', mode === 'sprint');
     updateModeDesc(mode);
     updateWarriorDisplay(mode);
     var isSolo = mode === 'solo';
-    var isSprint = mode === 'sprint';
     document.getElementById('btn-create').style.display = (isSolo) ? 'none' : '';
     document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
     document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -1379,31 +1473,60 @@ function initModeToggle() {
   }
 
   ffaBtn.addEventListener('click', function () { setMode('ffa'); });
-  towerBtn.addEventListener('click', function () { setMode('tower'); });
+  if (towerBtn) towerBtn.addEventListener('click', function () { setMode('tower'); });
   soloBtn.addEventListener('click', function () { setMode('solo'); });
   if (sprintBtn) sprintBtn.addEventListener('click', function () { setMode('sprint'); });
 }
 
 /* ==================== WEBSOCKET CONNECTION ==================== */
+function setConnectionControls(connected) {
+  var createBtn = document.getElementById('btn-create');
+  var joinBtn = document.getElementById('btn-join');
+  if (createBtn) createBtn.disabled = !connected;
+  if (joinBtn) joinBtn.disabled = !connected;
+}
+
+function scheduleReconnect() {
+  if (STATE.reconnectTimer) return;
+  var delay = Math.min(1000 * Math.pow(2, STATE.reconnectAttempts), 10000);
+  STATE.reconnectAttempts++;
+  setConnectStatus('Connection lost. Reconnecting in ' + Math.ceil(delay / 1000) + 's...', 'error');
+  STATE.reconnectTimer = setTimeout(function () {
+    STATE.reconnectTimer = null;
+    connectWebSocket();
+  }, delay);
+}
+
 function connectWebSocket() {
-  if (STATE.gameMode === 'solo') return;
+  if (STATE.ws && (STATE.ws.readyState === WebSocket.OPEN || STATE.ws.readyState === WebSocket.CONNECTING)) return;
   var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var wsUrl = protocol + '//' + location.host;
-  STATE.ws = new WebSocket(wsUrl);
+  setConnectionControls(false);
+  setConnectStatus('Connecting to game server...', '');
+  var socket = new WebSocket(wsUrl);
+  STATE.ws = socket;
 
-  STATE.ws.onopen = function () {
+  socket.onopen = function () {
+    if (STATE.ws !== socket) return;
+    STATE.reconnectAttempts = 0;
+    setConnectionControls(true);
     setConnectStatus('Connected! Ready to play.', 'success');
   };
 
-  STATE.ws.onclose = function () {
-    setConnectStatus('Connection lost. Please refresh.', 'error');
+  socket.onclose = function () {
+    if (STATE.ws !== socket) return;
+    STATE.ws = null;
+    setConnectionControls(false);
+    scheduleReconnect();
   };
 
-  STATE.ws.onerror = function () {
+  socket.onerror = function () {
+    if (STATE.ws !== socket) return;
     setConnectStatus('Connection error.', 'error');
   };
 
-  STATE.ws.onmessage = function (event) {
+  socket.onmessage = function (event) {
+    if (STATE.ws !== socket) return;
     var message;
     try { message = JSON.parse(event.data); } catch (e) { return; }
     handleMessage(message);
@@ -1453,6 +1576,7 @@ function handleMessage(msg) {
       STATE.yourCards = msg.yourCards;
       STATE.battleActive = true;
       STATE.isSprint = !!msg.sprint;
+      clearWeakTableReport();
       updateAllUI();
       if (STATE.isSprint) {
         document.getElementById('sprint-timer').classList.add('show');
@@ -1671,6 +1795,7 @@ function handleMessage(msg) {
         '<div class="winner-stat"><div class="ws-label">Correct</div><div class="ws-value" style="color:var(--neon-green)">' + msg.stats.correct + '</div></div>' +
         '<div class="winner-stat"><div class="ws-label">Wrong</div><div class="ws-value" style="color:var(--neon-red)">' + msg.stats.wrong + '</div></div>' +
         '<div class="winner-stat"><div class="ws-label">Accuracy</div><div class="ws-value" style="color:var(--neon-yellow)">' + msg.stats.accuracy + '%</div></div>';
+      renderWeakTableReport(msg.learningReports && msg.learningReports[STATE.you]);
       document.getElementById('winner-overlay').classList.add('show');
       document.getElementById('answer-input').disabled = true;
       document.getElementById('btn-attack').disabled = true;
@@ -1690,23 +1815,65 @@ function handleMessage(msg) {
 function send(message) {
   if (STATE.ws && STATE.ws.readyState === WebSocket.OPEN) {
     STATE.ws.send(JSON.stringify(message));
+    return true;
   }
+  setConnectionControls(false);
+  setConnectStatus('Not connected yet. Reconnecting...', 'error');
+  connectWebSocket();
+  return false;
 }
 
 /* ==================== CONNECT SCREEN ==================== */
 function setConnectStatus(text, type) {
   var el = document.getElementById('connect-status');
-  el.textContent = text;
-  el.className = 'connect-status' + (type ? ' ' + type : '');
+  if (el) {
+    el.textContent = text;
+    el.className = 'connect-status' + (type ? ' ' + type : '');
+  }
+  var waiting = document.getElementById('room-waiting-status');
+  var card = document.getElementById('connect-card');
+  if (waiting && card && card.classList.contains('waiting')) {
+    waiting.textContent = text;
+    waiting.className = 'connect-status' + (type ? ' ' + type : '');
+  }
 }
 
 function showRoomCode(code) {
-  var card = document.querySelector('.connect-card');
-  card.innerHTML = '<div class="connect-title">Room Created!</div>' +
-    '<div class="connect-label" style="text-align:center;">Share this code with your opponent:</div>' +
-    '<div class="room-code-display">' + code + '</div>' +
-    '<div class="connect-status success">Waiting for opponent to join...</div>';
-  // Keep background visible while waiting
+  var card = document.getElementById('connect-card');
+  document.getElementById('room-code-display').textContent = code;
+  document.getElementById('room-waiting-status').textContent = 'Waiting for opponent to join...';
+  card.classList.add('waiting');
+}
+
+function copyRoomCode() {
+  var code = document.getElementById('room-code-display').textContent.trim();
+  if (!code) return;
+
+  function copied() {
+    setConnectStatus('Room code copied: ' + code, 'success');
+  }
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(code).then(copied).catch(function () {
+      fallbackCopyRoomCode(code, copied);
+    });
+  } else {
+    fallbackCopyRoomCode(code, copied);
+  }
+}
+
+function fallbackCopyRoomCode(code, onSuccess) {
+  var input = document.createElement('textarea');
+  input.value = code;
+  input.setAttribute('readonly', '');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  var copied = false;
+  try { copied = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(input);
+  if (copied) onSuccess(); else setConnectStatus('Copy failed. Code: ' + code, 'error');
 }
 
 function showVSScreen(opponentName) {
@@ -1733,7 +1900,6 @@ function showVSOverlay() {
     sprintLabel.style.cssText = 'font-size:1.2rem;color:var(--neon-yellow);text-shadow:var(--glow-yellow);text-transform:uppercase;letter-spacing:3px;';
     sprintLabel.textContent = '⏱ 60-Second Sprint!';
     cardsDisplay.appendChild(sprintLabel);
-  } else {
   } else {
   var mySide = document.createElement('div');
   mySide.className = 'vs-cards-side';
@@ -1873,6 +2039,10 @@ function goHome() {
   document.getElementById('countdown-overlay').classList.remove('show');
   document.getElementById('sprint-timer').classList.remove('show', 'warning');
   document.getElementById('connect-status').textContent = '';
+  document.getElementById('connect-card').classList.remove('waiting');
+  document.getElementById('room-code-display').textContent = '';
+  document.getElementById('room-waiting-status').textContent = 'Waiting for opponent to join...';
+  clearWeakTableReport();
   // Restore HP and magic cards sections
   var hpSections = document.querySelectorAll('.hp-section');
   var magicSections = document.querySelectorAll('.magic-cards-section');
@@ -2173,8 +2343,12 @@ function initEventListeners() {
     };
     STATE.settings = settings;
     STATE.you = 0;
-    send({ type: 'setName', name: name });
+    if (!send({ type: 'setName', name: name })) return;
     send({ type: 'createRoom', settings: settings });
+  });
+
+  document.getElementById('copy-room-code').addEventListener('click', function () {
+    Sound.init(); Sound.click(); copyRoomCode();
   });
 
   // Join room
@@ -2184,7 +2358,7 @@ function initEventListeners() {
     var code = document.getElementById('join-code').value.trim().toUpperCase();
     if (!code) { setConnectStatus('Please enter a room code', 'error'); return; }
     STATE.you = 1;
-    send({ type: 'setName', name: name });
+    if (!send({ type: 'setName', name: name })) return;
     send({ type: 'joinRoom', code: code });
   });
 

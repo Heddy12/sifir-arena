@@ -85,7 +85,41 @@ function generateQuestion(sifir, difficulty) {
   let a, b;
   if (Math.random() < 0.5) { a = sifirNum; b = multiplier; }
   else { a = multiplier; b = sifirNum; }
-  return { a: a, b: b, answer: a * b, isWeak: false };
+  return { a: a, b: b, answer: a * b, isWeak: false, table: sifirNum };
+}
+
+function recordTableAttempt(player, question, isCorrect) {
+  if (!player || !question) return;
+  const table = Number(question.table || Math.min(question.a, question.b));
+  if (!player.tableStats) player.tableStats = {};
+  if (!player.tableStats[table]) {
+    player.tableStats[table] = { table: table, correct: 0, wrong: 0, attempts: 0 };
+  }
+  const stats = player.tableStats[table];
+  stats.attempts++;
+  if (isCorrect) stats.correct++; else stats.wrong++;
+}
+
+function buildLearningReport(player) {
+  const tableStats = player && player.tableStats ? player.tableStats : {};
+  return Object.keys(tableStats).map(function (key) {
+    const item = tableStats[key];
+    return {
+      table: item.table,
+      correct: item.correct,
+      wrong: item.wrong,
+      attempts: item.attempts,
+      accuracy: item.attempts > 0 ? Math.round((item.correct / item.attempts) * 100) : 0
+    };
+  }).sort(function (a, b) {
+    if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
+    if (a.wrong !== b.wrong) return b.wrong - a.wrong;
+    return a.table - b.table;
+  });
+}
+
+function getLearningReports(room) {
+  return room.gameState.players.map(buildLearningReport);
 }
 
 function createRoom(playerId, playerName, settings) {
@@ -134,8 +168,8 @@ function startBattle(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {} },
-      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {} }
+      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {}, tableStats: {} },
+      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {}, tableStats: {} }
     ]
   };
 
@@ -173,7 +207,7 @@ function nextTurn(room) {
   let question;
   if (room.weakQuestions.length > 0 && Math.random() < 0.3) {
     const wq = room.weakQuestions[Math.floor(Math.random() * room.weakQuestions.length)];
-    question = { a: wq.a, b: wq.b, answer: wq.a * wq.b, isWeak: true };
+    question = { a: wq.a, b: wq.b, answer: wq.a * wq.b, isWeak: true, table: wq.table };
   } else {
     question = generateQuestion(room.settings.sifir, room.settings.difficulty);
   }
@@ -243,8 +277,7 @@ function handleAnswer(room, playerId, answer) {
 function handleCorrect(room, player, opponent, playerIdx, timeTaken) {
   player.correct++;
   player.streak++;
-
-  const sifirKey = Math.max(room.currentQuestion.a, room.currentQuestion.b);
+  recordTableAttempt(player, room.currentQuestion, true);
   player.score += 10;
 
   let damage = 10;
@@ -288,9 +321,10 @@ function handleCorrect(room, player, opponent, playerIdx, timeTaken) {
 }
 
 function handleWrong(room, player, playerIdx) {
+  recordTableAttempt(player, room.currentQuestion, false);
   if (player.activeEffects.secondChance) {
     player.activeEffects.secondChance = false;
-    room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b });
+    room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
     broadcast(room, {
       type: 'answerResult',
       correct: false,
@@ -304,7 +338,7 @@ function handleWrong(room, player, playerIdx) {
   player.wrong++;
   player.streak = 0;
   player.hp = Math.max(0, player.hp - 5);
-  room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b });
+  room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
 
   broadcast(room, {
     type: 'answerResult',
@@ -318,10 +352,11 @@ function handleWrong(room, player, playerIdx) {
 function handleTimeout(room) {
   if (!room.battleActive || !room.currentQuestion) return;
   const player = room.gameState.players[room.currentPlayer];
+  recordTableAttempt(player, room.currentQuestion, false);
 
   if (player.activeEffects.secondChance) {
     player.activeEffects.secondChance = false;
-    room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b });
+    room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
     broadcast(room, {
       type: 'timeout',
       playerIdx: room.currentPlayer,
@@ -339,7 +374,7 @@ function handleTimeout(room) {
   player.wrong++;
   player.streak = 0;
   player.hp = Math.max(0, player.hp - 8);
-  room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b });
+  room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
 
   broadcast(room, {
     type: 'timeout',
@@ -442,8 +477,8 @@ function startSprint(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} },
-      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {} }
+      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} },
+      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} }
     ]
   };
 
@@ -503,6 +538,7 @@ function handleSprintAnswer(room, playerId, answer) {
 
   const userAnswer = parseInt(answer);
   const isCorrect = !isNaN(userAnswer) && userAnswer === question.answer;
+  recordTableAttempt(player, question, isCorrect);
 
   if (isCorrect) {
     player.correct++;
@@ -534,6 +570,7 @@ function handleSprintTimeout(room, playerIdx) {
   const player = room.gameState.players[playerIdx];
   const question = room.sprintQuestions[playerIdx];
   if (!question) return;
+  recordTableAttempt(player, question, false);
 
   player.wrong++;
   player.streak = 0;
@@ -578,6 +615,7 @@ function endSprint(room) {
     winnerIdx: winnerIdx,
     winnerName: winner.name,
     sprint: true,
+    learningReports: getLearningReports(room),
     stats: {
       score: winner.score,
       correct: winner.correct,
@@ -598,6 +636,7 @@ function checkWin(room) {
         type: 'gameOver',
         winnerIdx: winnerIdx,
         winnerName: winner.name,
+        learningReports: getLearningReports(room),
         stats: {
           score: winner.score,
           correct: winner.correct,
