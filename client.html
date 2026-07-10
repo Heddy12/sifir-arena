@@ -309,8 +309,8 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
 /* ==================== CHARACTERS (ICE GIRL / FIRE BOY) ==================== */
 #warriors-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
 .character{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all 1s ease;width:300px;}
-.character.ice-girl{left:4%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
-.character.fire-boy{right:4%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
+.character.ice-girl{right:4%;bottom:50%;transform:translateY(50%);animation:charFloatIce 4s ease-in-out infinite;}
+.character.fire-boy{left:4%;bottom:50%;transform:translateY(50%);animation:charFloatFire 4s ease-in-out infinite;}
 @keyframes charFloatIce{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(5px);}}
 @keyframes charFloatFire{0%,100%{transform:translateY(50%) translateX(0);}50%{transform:translateY(calc(50% - 12px)) translateX(-5px);}}
 .char-platform{position:absolute;top:55%;left:50%;width:320px;height:320px;transform:translate(-50%,-50%);border-radius:50%;z-index:0;opacity:0.95;}
@@ -375,8 +375,8 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
   .char-emoji{font-size:4rem;}
   .char-platform{width:165px;height:165px;}
   .char-aura{width:190px;height:190px;}
-  .character.ice-girl{left:1%;}
-  .character.fire-boy{right:1%;}
+  .character.ice-girl{right:1%;}
+  .character.fire-boy{left:1%;}
   #vs-lightning{font-size:2.5rem;}
 }
 </style>
