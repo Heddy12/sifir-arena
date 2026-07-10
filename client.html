@@ -1644,7 +1644,7 @@ function handleMessage(msg) {
       var isMyAnswer = msg.playerIdx === STATE.you;
       var answererName = STATE.players[msg.playerIdx].name;
       if (msg.sprint) {
-        // Sprint: just update feedback, re-enable input for next question
+        // Sprint: update feedback, wait for next question (newTurn) to re-enable input
         if (msg.correct) {
           document.getElementById('feedback-msg').textContent = '✓ CORRECT!';
           document.getElementById('feedback-msg').className = 'feedback-msg correct';
@@ -1659,11 +1659,7 @@ function handleMessage(msg) {
           document.getElementById(sprintSelf).classList.add('shake', 'flash-red');
           setTimeout(function () { document.getElementById(sprintSelf).classList.remove('shake', 'flash-red'); }, 400);
         }
-        // Re-enable input immediately for next question
-        document.getElementById('answer-input').disabled = false;
-        document.getElementById('btn-attack').disabled = false;
-        document.getElementById('answer-input').value = '';
-        document.getElementById('answer-input').focus();
+        // Keep input disabled until newTurn arrives with next question
       } else if (msg.correct) {
         if (isMyAnswer) {
           document.getElementById('feedback-msg').textContent = 'CORRECT! -' + msg.damage + ' HP' + (msg.bonusMsg || '');
@@ -1710,10 +1706,7 @@ function handleMessage(msg) {
         document.getElementById('feedback-msg').textContent = '⏱ TIME OUT! Answer: ' + msg.answer;
         document.getElementById('feedback-msg').className = 'feedback-msg timeout';
         Sound.timeout();
-        document.getElementById('answer-input').disabled = false;
-        document.getElementById('btn-attack').disabled = false;
-        document.getElementById('answer-input').value = '';
-        document.getElementById('answer-input').focus();
+        // Keep input disabled until newTurn arrives
       } else if (msg.secondChance) {
         document.getElementById('feedback-msg').textContent = (isMyTimeout ? 'TIME OUT!' : timeoutName + ' timed out!') + ' But Second Chance saved! Answer: ' + msg.answer;
         document.getElementById('feedback-msg').className = 'feedback-msg card';
