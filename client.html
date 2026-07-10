@@ -251,6 +251,8 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .damage-float.dmg{color:var(--neon-red);text-shadow:var(--glow-red);}
 .damage-float.heal{color:var(--neon-green);text-shadow:var(--glow-green);}
 @keyframes floatUp{from{transform:translateY(0);opacity:1;}to{transform:translateY(-60px);opacity:0;}}
+.impact-spark{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:100;animation:impactBurst 0.6s ease-out forwards;box-shadow:0 0 6px currentColor;}
+@keyframes impactBurst{0%{opacity:1;transform:translate(0,0) scale(1.2);}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0.2);}}
 
 /* POWER EFFECTS */
 .power-effect{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;border-radius:var(--radius);overflow:hidden;}
@@ -1167,6 +1169,7 @@ function soloHandleCorrect(player, opponent) {
   document.getElementById('fighter-right').classList.add('shake', 'flash-red');
   setTimeout(function () { document.getElementById('fighter-right').classList.remove('shake', 'flash-red'); }, 500);
   if (actualDamage > 0) showFloatingDamage('fighter-right', '-' + actualDamage, 'dmg');
+  spawnImpactBurst('fighter-right');
   addLog('correct', player.name + ' answered correctly: ' + STATE.currentQuestion.a + 'x' + STATE.currentQuestion.b + '=' + STATE.currentQuestion.answer + ' (-' + actualDamage + ' HP)');
 }
 
@@ -1193,6 +1196,7 @@ function soloHandleWrong(player) {
   document.getElementById('fighter-left').classList.add('shake', 'flash-red');
   setTimeout(function () { document.getElementById('fighter-left').classList.remove('shake', 'flash-red'); }, 500);
   showFloatingDamage('fighter-left', '-5', 'dmg');
+  spawnImpactBurst('fighter-left', ['#ff2e63', '#ff6b00', '#a020f0', '#ffe600']);
   addLog('wrong', player.name + ' answered wrong (Answer: ' + STATE.currentQuestion.answer + ', -5 HP)');
   updateAllUI();
 }
@@ -1224,6 +1228,7 @@ function soloHandleTimeout() {
   document.getElementById('fighter-left').classList.add('shake', 'flash-red');
   setTimeout(function () { document.getElementById('fighter-left').classList.remove('shake', 'flash-red'); }, 500);
   showFloatingDamage('fighter-left', '-8', 'dmg');
+  spawnImpactBurst('fighter-left', ['#ff6b00', '#ff2e63', '#ffe600', '#a020f0']);
   addLog('timeout', player.name + ' timed out! (Answer: ' + STATE.currentQuestion.answer + ', -8 HP)');
   updateAllUI();
   setTimeout(function () { if (soloCheckWin()) return; soloNextTurn(); }, 1500);
@@ -1473,6 +1478,7 @@ function handleMessage(msg) {
         document.getElementById(flashTarget).classList.add('shake', 'flash-red');
         setTimeout(function () { document.getElementById(flashTarget).classList.remove('shake', 'flash-red'); }, 500);
         if (msg.damage > 0) showFloatingDamage(flashTarget, '-' + msg.damage, 'dmg');
+        spawnImpactBurst(flashTarget);
         addLog('correct', answererName + ' answered correctly: ' + STATE.currentQuestion.a + 'x' + STATE.currentQuestion.b + '=' + msg.answer + ' (-' + msg.damage + ' HP)');
       } else {
         if (msg.secondChance) {
@@ -1488,6 +1494,7 @@ function handleMessage(msg) {
           document.getElementById(selfCard).classList.add('shake', 'flash-red');
           setTimeout(function () { document.getElementById(selfCard).classList.remove('shake', 'flash-red'); }, 500);
           showFloatingDamage(selfCard, '-' + (msg.damage || 5), 'dmg');
+          spawnImpactBurst(selfCard, ['#ff2e63', '#ff6b00', '#a020f0', '#ffe600']);
           addLog('wrong', answererName + ' answered wrong (Answer: ' + msg.answer + ')');
         }
       }
@@ -1512,6 +1519,7 @@ function handleMessage(msg) {
         document.getElementById(timeoutCard).classList.add('shake', 'flash-red');
         setTimeout(function () { document.getElementById(timeoutCard).classList.remove('shake', 'flash-red'); }, 500);
         showFloatingDamage(timeoutCard, '-' + (msg.damage || 8), 'dmg');
+        spawnImpactBurst(timeoutCard, ['#ff6b00', '#ff2e63', '#ffe600', '#a020f0']);
         addLog('timeout', timeoutName + ' timed out (Answer: ' + msg.answer + ')');
       }
       document.getElementById('answer-input').disabled = true;
@@ -1930,6 +1938,34 @@ function showFloatingDamage(cardId, text, type) {
   float.style.top = '20px'; float.style.left = '50%'; float.style.transform = 'translateX(-50%)';
   card.style.position = 'relative'; card.appendChild(float);
   setTimeout(function () { float.remove(); }, 1000);
+}
+
+/* ==================== IMPACT BURST SPARKS ==================== */
+function spawnImpactBurst(cardId, colors) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+  var palette = colors || ['#ff2e63', '#ffe600', '#ff6b00', '#00f0ff'];
+  card.style.position = 'relative';
+  var count = 10;
+  for (var i = 0; i < count; i++) {
+    var spark = document.createElement('div');
+    spark.className = 'impact-spark';
+    var angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+    var dist = 50 + Math.random() * 60;
+    var dx = Math.cos(angle) * dist;
+    var dy = Math.sin(angle) * dist;
+    var color = palette[Math.floor(Math.random() * palette.length)];
+    spark.style.setProperty('--dx', dx + 'px');
+    spark.style.setProperty('--dy', dy + 'px');
+    spark.style.background = color;
+    spark.style.color = color;
+    spark.style.left = '50%';
+    spark.style.top = '40%';
+    spark.style.marginLeft = '-3px';
+    spark.style.marginTop = '-3px';
+    card.appendChild(spark);
+    (function (s) { setTimeout(function () { s.remove(); }, 650); })(spark);
+  }
 }
 
 /* ==================== BATTLE LOG ==================== */
