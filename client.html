@@ -389,7 +389,7 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
   <div class="subtitle">MULTIPLAYER - FIGHTER EDITION</div>
   <div class="header-info">
     <div class="chip">Room: <span id="hdr-room">-</span></div>
-    <div class="chip">Timer: <span id="hdr-timer">6s</span></div>
+    <div class="chip">Timer: <span id="hdr-timer">20s</span></div>
     <div class="chip">Round: <span id="hdr-round">0</span></div>
   </div>
 </header>
@@ -466,9 +466,10 @@ header .subtitle{font-size:0.75rem;color:var(--text-dim);letter-spacing:2px;marg
       <div class="settings-row">
         <select id="setting-timer">
           <option value="4">4s Timer</option>
-          <option value="6" selected>6s Timer</option>
+          <option value="6">6s Timer</option>
           <option value="8">8s Timer</option>
           <option value="10">10s Timer</option>
+          <option value="20" selected>20s Timer</option>
         </select>
         <select id="setting-sifir">
           <option value="0" selected>All Sifir</option>
@@ -637,7 +638,7 @@ var STATE = {
   timerInterval: null,
   timeLeft: 0,
   gameMode: 'ffa',
-  settings: { timer: 6, sifir: 0, difficulty: 'random' }
+  settings: { timer: 20, sifir: 0, difficulty: 'random' }
 };
 
 var CARD_POOL = [
