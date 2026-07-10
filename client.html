@@ -261,10 +261,10 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .shake{animation:shake 0.3s ease;}
 @keyframes flashRed{0%,100%{background-color:var(--bg-card-2);}50%{background-color:rgba(255,46,99,0.3);}}
 .flash-red{animation:flashRed 0.4s ease;}
-.damage-float{position:absolute;font-size:1.5rem;font-weight:bold;pointer-events:none;animation:floatUp 1s ease forwards;z-index:100;}
+.damage-float{position:absolute;font-size:1.5rem;font-weight:bold;pointer-events:none;animation:floatDamage 1s ease forwards;z-index:100;}
 .damage-float.dmg{color:var(--neon-red);text-shadow:var(--glow-red);}
 .damage-float.heal{color:var(--neon-green);text-shadow:var(--glow-green);}
-@keyframes floatUp{from{transform:translateY(0);opacity:1;}to{transform:translateY(-60px);opacity:0;}}
+@keyframes floatDamage{from{transform:translateY(0);opacity:1;}to{transform:translateY(-60px);opacity:0;}}
 .impact-spark{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;z-index:100;animation:impactBurst 0.6s ease-out forwards;box-shadow:0 0 6px currentColor;}
 @keyframes impactBurst{0%{opacity:1;transform:translate(0,0) scale(1.2);}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0.2);}}
 
@@ -690,7 +690,6 @@ var STATE = {
   timeLeft: 0,
   gameMode: 'ffa',
   settings: { timer: 20, sifir: 0, difficulty: 'random' },
-  sprintInterval: null,
   sprintTimeLeft: 60,
   isSprint: false,
   reconnectTimer: null,
@@ -1138,7 +1137,6 @@ function startSoloGame() {
   STATE.round = 0;
   STATE.currentPlayer = 0;
   STATE.currentQuestion = null;
-  STATE.weakQuestions = [];
   STATE.learningStats = {};
   clearWeakTableReport();
   STATE.players = [
@@ -1173,23 +1171,12 @@ function startSoloGame() {
 }
 
 function dealCards() {
-  var pool = [
-    { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: '2x damage on next correct answer' },
-    { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block next incoming attack' },
-    { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Stop timer for current question' },
-    { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore +20 HP' },
-    { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Show if answer is even or odd' },
-    { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'New question, no penalty' },
-    { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Steal 15 HP from opponent' },
-    { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'No penalty on next wrong answer' },
-    { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: '+3 streak instantly' },
-    { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect damage to opponent (1 turn)' }
-  ];
-  var shuffled = pool.slice();
+  var shuffled = CARD_POOL.slice();
   var cards = [];
   for (var i = 0; i < 3; i++) {
     var idx = Math.floor(Math.random() * shuffled.length);
-    cards.push({ id: shuffled[idx].id, name: shuffled[idx].name, icon: shuffled[idx].icon, category: shuffled[idx].category, desc: shuffled[idx].desc, used: false });
+    var c = shuffled[idx];
+    cards.push({ id: c.id, name: c.name, icon: c.icon, category: c.category, desc: c.desc, used: false });
     shuffled.splice(idx, 1);
   }
   return cards;
@@ -1299,7 +1286,7 @@ function soloHandleCorrect(player, opponent) {
   setTimeout(function () { document.getElementById('fighter-right').classList.remove('shake', 'flash-red'); }, 500);
   if (actualDamage > 0) showFloatingDamage('fighter-right', '-' + actualDamage, 'dmg');
   spawnImpactBurst('fighter-right');
-  addLog('correct', player.name + ' answered correctly: ' + STATE.currentQuestion.a + 'x' + STATE.currentQuestion.b + '=' + STATE.currentQuestion.answer + ' (-' + actualDamage + ' HP)');
+  addLog('correct', player.name + ' answered correctly: ' + STATE.currentQuestion.a + ' x ' + STATE.currentQuestion.b + '=' + STATE.currentQuestion.answer + ' (-' + actualDamage + ' HP)');
 }
 
 function soloHandleWrong(player) {
@@ -1435,7 +1422,7 @@ function updateModeDesc(mode) {
   var desc = document.getElementById('mode-desc');
   if (mode === 'solo') {
     desc.textContent = 'Face the Sifir Tower alone. Answer correctly to destroy the tower!';
-    document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
+    try { document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0')); } catch (e) {}
   } else if (mode === 'sprint') {
     desc.textContent = '60-second blitz! Answer as many as you can. Most correct wins!';
   } else {
@@ -1677,7 +1664,7 @@ function handleMessage(msg) {
         setTimeout(function () { document.getElementById(flashTarget).classList.remove('shake', 'flash-red'); }, 500);
         if (msg.damage > 0) showFloatingDamage(flashTarget, '-' + msg.damage, 'dmg');
         spawnImpactBurst(flashTarget);
-        addLog('correct', answererName + ' answered correctly: ' + STATE.currentQuestion.a + 'x' + STATE.currentQuestion.b + '=' + msg.answer + ' (-' + msg.damage + ' HP)');
+        addLog('correct', answererName + ' answered correctly: ' + STATE.currentQuestion.a + ' x ' + STATE.currentQuestion.b + '=' + msg.answer + ' (-' + msg.damage + ' HP)');
       } else {
         if (msg.secondChance) {
           document.getElementById('feedback-msg').textContent = (isMyAnswer ? 'WRONG!' : answererName + ' wrong!') + ' But Second Chance saved! Answer: ' + msg.answer;
@@ -2019,7 +2006,7 @@ function startCountdown(callback) {
 
 /* ==================== GO HOME ==================== */
 function goHome() {
-  if (typeof ws !== 'undefined' && ws && ws.readyState === WebSocket.OPEN) ws.close();
+  if (STATE.ws && STATE.ws.readyState === WebSocket.OPEN) STATE.ws.close();
   stopTimerDisplay();
   STATE.battleActive = false;
   STATE.isSprint = false;

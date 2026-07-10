@@ -19,6 +19,17 @@ const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
 
+/* ==================== CONSTANTS ==================== */
+const SPRINT_DURATION = 60;
+const TURN_DELAY = 1500;
+const FIRST_TURN_DELAY = 2000;
+const BASE_HP = 100;
+const BASE_DAMAGE = 10;
+const WRONG_DAMAGE = 5;
+const TIMEOUT_DAMAGE = 8;
+const FAST_BONUS = 5;
+const SCORE_PER_CORRECT = 10;
+
 /* ==================== CARD POOL ==================== */
 const CARD_POOL = [
   { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: '2x damage on next correct answer' },
@@ -122,7 +133,7 @@ function getLearningReports(room) {
   return room.gameState.players.map(buildLearningReport);
 }
 
-function createRoom(playerId, playerName, settings) {
+function createRoom(playerId, settings) {
   const code = generateRoomCode();
   rooms[code] = {
     code: code,
@@ -147,7 +158,7 @@ function createRoom(playerId, playerName, settings) {
   return code;
 }
 
-function joinRoom(playerId, playerName, code) {
+function joinRoom(playerId, code) {
   const room = rooms[code];
   if (!room) return { error: 'Room not found' };
   if (room.players.length >= 2) return { error: 'Room is full' };
@@ -168,8 +179,8 @@ function startBattle(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {}, tableStats: {} },
-      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {}, tableStats: {} }
+      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {}, tableStats: {} },
+      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {}, tableStats: {} }
     ]
   };
 
@@ -194,7 +205,7 @@ function startBattle(room) {
   });
 
   // Start first round after a delay
-  setTimeout(function () { nextTurn(room); }, 2000);
+  setTimeout(function () { nextTurn(room); }, FIRST_TURN_DELAY);
 }
 
 function nextTurn(room) {
@@ -271,16 +282,16 @@ function handleAnswer(room, playerId, answer) {
   setTimeout(function () {
     if (checkWin(room)) return;
     nextTurn(room);
-  }, 1500);
+  }, TURN_DELAY);
 }
 
 function handleCorrect(room, player, opponent, playerIdx, timeTaken) {
   player.correct++;
   player.streak++;
   recordTableAttempt(player, room.currentQuestion, true);
-  player.score += 10;
+  player.score += SCORE_PER_CORRECT;
 
-  let damage = 10;
+  let damage = BASE_DAMAGE;
   let bonusMsg = '';
 
   if (timeTaken < room.settings.timer / 2) { damage += 5; bonusMsg += ' +5 (Fast!)'; }
@@ -337,7 +348,7 @@ function handleWrong(room, player, playerIdx) {
 
   player.wrong++;
   player.streak = 0;
-  player.hp = Math.max(0, player.hp - 5);
+  player.hp = Math.max(0, player.hp - WRONG_DAMAGE);
   room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
 
   broadcast(room, {
@@ -367,13 +378,13 @@ function handleTimeout(room) {
     setTimeout(function () {
       if (checkWin(room)) return;
       nextTurn(room);
-    }, 1500);
+    }, TURN_DELAY);
     return;
   }
 
   player.wrong++;
   player.streak = 0;
-  player.hp = Math.max(0, player.hp - 8);
+  player.hp = Math.max(0, player.hp - TIMEOUT_DAMAGE);
   room.weakQuestions.push({ a: room.currentQuestion.a, b: room.currentQuestion.b, table: room.currentQuestion.table });
 
   broadcast(room, {
@@ -387,7 +398,7 @@ function handleTimeout(room) {
   setTimeout(function () {
     if (checkWin(room)) return;
     nextTurn(room);
-  }, 1500);
+  }, TURN_DELAY);
 }
 
 function handleCardActivate(room, playerId, cardIdx) {
@@ -477,14 +488,14 @@ function startSprint(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} },
-      { name: players[p2Id].name, hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} }
+      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} },
+      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} }
     ]
   };
 
   room.round = 0;
   room.battleActive = true;
-  room.sprintTimeLeft = 60;
+  room.sprintTimeLeft = SPRINT_DURATION;
 
   sendToPlayer(p1Id, { type: 'gameStart', you: 0, players: room.gameState.players, yourCards: [], sprint: true });
   sendToPlayer(p2Id, { type: 'gameStart', you: 1, players: room.gameState.players, yourCards: [], sprint: true });
@@ -496,7 +507,7 @@ function startSprint(room) {
   // Start sprint match timer (60s)
   const sprintStart = Date.now();
   room.sprintInterval = setInterval(function () {
-    room.sprintTimeLeft = 60 - Math.floor((Date.now() - sprintStart) / 1000);
+    room.sprintTimeLeft = SPRINT_DURATION - Math.floor((Date.now() - sprintStart) / 1000);
     if (room.sprintTimeLeft <= 0) {
       room.sprintTimeLeft = 0;
       clearInterval(room.sprintInterval);
@@ -543,7 +554,7 @@ function handleSprintAnswer(room, playerId, answer) {
   if (isCorrect) {
     player.correct++;
     player.streak++;
-    player.score += 10;
+    player.score += SCORE_PER_CORRECT;
   } else {
     player.wrong++;
     player.streak = 0;
@@ -593,9 +604,6 @@ function handleSprintTimeout(room, playerIdx) {
 function endSprint(room) {
   room.battleActive = false;
   clearInterval(room.sprintInterval);
-  if (room.sprintTimers) {
-    room.sprintTimers.forEach(function (t) { clearInterval(t); });
-  }
 
   const p0 = room.gameState.players[0];
   const p1 = room.gameState.players[1];
@@ -721,7 +729,7 @@ const server = http.createServer(function (req, res) {
     return;
   }
   const resolved = path.resolve(__dirname, '.' + (urlPath.startsWith('/') ? urlPath : '/' + urlPath));
-  if (!resolved.startsWith(__dirname)) {
+  if (!resolved.startsWith(__dirname + path.sep)) {
     res.writeHead(403); res.end('Forbidden'); return;
   }
   serveFile(resolved, res, true);
@@ -749,23 +757,23 @@ wss.on('connection', function connection(ws) {
         players[playerId].name = message.name;
         break;
 
-      case 'createRoom':
-        var settings = message.settings || { timer: 6, sifir: 0, difficulty: 'random' };
-        var code = createRoom(playerId, players[playerId].name, settings);
+      case 'createRoom': {
+        const settings = message.settings || { timer: 6, sifir: 0, difficulty: 'random' };
+        const code = createRoom(playerId, settings);
         sendToPlayer(playerId, { type: 'roomCreated', code: code });
         break;
+      }
 
-      case 'joinRoom':
-        var joinResult = joinRoom(playerId, players[playerId].name, message.code);
+      case 'joinRoom': {
+        const joinResult = joinRoom(playerId, message.code);
         if (joinResult.error) {
           sendToPlayer(playerId, { type: 'joinError', error: joinResult.error });
         } else {
           sendToPlayer(playerId, { type: 'roomJoined', code: message.code });
-          // Notify player 1 that opponent joined
-          var room = rooms[message.code];
+          const room = rooms[message.code];
           if (room && room.players.length === 2) {
-            var p1Id = room.players[0];
-            var p2Id = room.players[1];
+            const p1Id = room.players[0];
+            const p2Id = room.players[1];
             sendToPlayer(p1Id, {
               type: 'opponentJoined',
               opponentName: players[p2Id].name,
@@ -779,38 +787,44 @@ wss.on('connection', function connection(ws) {
           }
         }
         break;
+      }
 
-      case 'startBattle':
-        var room = rooms[players[playerId].roomCode];
+      case 'startBattle': {
+        const room = rooms[players[playerId].roomCode];
         if (room && room.players.length === 2) {
           startBattle(room);
         }
         break;
+      }
 
-      case 'answer':
-        var room = rooms[players[playerId].roomCode];
+      case 'answer': {
+        const room = rooms[players[playerId].roomCode];
         if (room) handleAnswer(room, playerId, message.answer);
         break;
+      }
 
-      case 'sprintTimeout':
-        var room = rooms[players[playerId].roomCode];
+      case 'sprintTimeout': {
+        const room = rooms[players[playerId].roomCode];
         if (room && room.gameMode === 'sprint') {
-          var idx = players[playerId].playerIdx;
+          const idx = players[playerId].playerIdx;
           handleSprintTimeout(room, idx);
         }
         break;
+      }
 
-      case 'activateCard':
-        var room = rooms[players[playerId].roomCode];
+      case 'activateCard': {
+        const room = rooms[players[playerId].roomCode];
         if (room) handleCardActivate(room, playerId, message.cardIdx);
         break;
+      }
 
-      case 'rematch':
-        var room = rooms[players[playerId].roomCode];
+      case 'rematch': {
+        const room = rooms[players[playerId].roomCode];
         if (room && room.players.length === 2) {
           startBattle(room);
         }
         break;
+      }
 
       case 'leaveRoom':
         handleDisconnect(playerId);
