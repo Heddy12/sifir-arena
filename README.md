@@ -1,4 +1,4 @@
-# ASMD Sifir Hero Arena - Multiplayer Edition
+# ASMD Times Table Hero Arena - Multiplayer Edition
 
 Real-time multiplayer math battle game for 2 players on separate devices.
 
@@ -7,9 +7,8 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 | File | Description |
 |------|-------------|
 | `server.js` | WebSocket server (Node.js) — room management, game logic, state sync |
-| `client.html` | Multiplayer client — connect screen, battle arena, real-time sync |
+| `client.html` | Game client (self-contained) — connect screen, Solo Quest, Sprint & multiplayer battle arena, real-time sync |
 | `package.json` | Node.js dependencies and scripts |
-| `index.html` | Solo/Local version (not used by server) |
 
 ## Quick Start (Local Testing)
 
@@ -35,7 +34,7 @@ npm start
 ```bash
 git init
 git add .
-git commit -m "ASMD Sifir Hero Arena Multiplayer"
+git commit -m "ASMD Times Table Hero Arena Multiplayer"
 git remote add origin https://github.com/YOUR_USERNAME/sifir-arena.git
 git push -u origin main
 ```

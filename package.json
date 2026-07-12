@@ -1,7 +1,7 @@
 {
   "name": "asmd-sifir-hero-arena",
   "version": "1.0.0",
-  "description": "ASMD Sifir Hero Arena - Fighter Edition (Multiplayer Server)",
+  "description": "ASMD Times Table Hero Arena - Fighter Edition (Multiplayer Server)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

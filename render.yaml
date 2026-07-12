@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sifir-arena
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production

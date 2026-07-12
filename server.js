@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ASMD Sifir Hero Arena - Fighter Edition
+ * ASMD Times Table Hero Arena - Fighter Edition
  * Multiplayer WebSocket Server
  *
  * Features:
@@ -149,8 +149,9 @@ function createRoom(playerId, settings) {
     timeLeft: 0,
     questionStartTime: 0,
     battleActive: false,
+    timerFrozen: false,
     sprintInterval: null,
-    sprintTimeLeft: SPRINT_DURATION,
+    sprintTimeLeft: settings.sprintTime || SPRINT_DURATION,
     sprintQuestions: [null, null]
   };
   players[playerId].roomCode = code;
@@ -170,6 +171,7 @@ function joinRoom(playerId, code) {
 
 function startBattle(room) {
   if (room.gameMode === 'sprint') { startSprint(room); return; }
+  room.timerFrozen = false;
   const p1Id = room.players[0];
   const p2Id = room.players[1];
   const settings = room.settings;
@@ -226,6 +228,7 @@ function nextTurn(room) {
   room.questionStartTime = Date.now();
 
   // Start timer
+  room.timerFrozen = false;
   startTimer(room);
 
   // Notify both players
@@ -278,6 +281,8 @@ function handleAnswer(room, playerId, answer) {
   }
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
+
+  room.currentQuestion = null;
 
   setTimeout(function () {
     if (checkWin(room)) return;
@@ -421,6 +426,7 @@ function handleCardActivate(room, playerId, cardIdx) {
       break;
     case 'timeFreeze':
       stopTimer(room);
+      room.timerFrozen = true;
       cardResult.timerFrozen = true;
       break;
     case 'healPotion':
@@ -471,6 +477,7 @@ function handleCardActivate(room, playerId, cardIdx) {
       }
       room.currentQuestion = question;
       room.questionStartTime = Date.now();
+      room.timerFrozen = false;
       startTimer(room);
       broadcast(room, {
         type: 'newQuestion',
@@ -483,6 +490,9 @@ function handleCardActivate(room, playerId, cardIdx) {
 
 /* ==================== SPRINT MODE ==================== */
 function startSprint(room) {
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  room.timerFrozen = false;
+  const sprintDuration = room.settings.sprintTime || SPRINT_DURATION;
   const p1Id = room.players[0];
   const p2Id = room.players[1];
 
@@ -495,7 +505,7 @@ function startSprint(room) {
 
   room.round = 0;
   room.battleActive = true;
-  room.sprintTimeLeft = SPRINT_DURATION;
+  room.sprintTimeLeft = sprintDuration;
 
   sendToPlayer(p1Id, { type: 'gameStart', you: 0, players: room.gameState.players, yourCards: [], sprint: true });
   sendToPlayer(p2Id, { type: 'gameStart', you: 1, players: room.gameState.players, yourCards: [], sprint: true });
@@ -507,7 +517,7 @@ function startSprint(room) {
   // Start sprint match timer (60s)
   const sprintStart = Date.now();
   room.sprintInterval = setInterval(function () {
-    room.sprintTimeLeft = SPRINT_DURATION - Math.floor((Date.now() - sprintStart) / 1000);
+    room.sprintTimeLeft = sprintDuration - Math.floor((Date.now() - sprintStart) / 1000);
     if (room.sprintTimeLeft <= 0) {
       room.sprintTimeLeft = 0;
       clearInterval(room.sprintInterval);
@@ -661,18 +671,31 @@ function checkWin(room) {
 function handleDisconnect(playerId) {
   const player = players[playerId];
   if (!player) return;
-  const room = rooms[player.roomCode];
-  if (room) {
-    broadcast(room, { type: 'opponentLeft' });
-    stopTimer(room);
-    if (room.sprintInterval) clearInterval(room.sprintInterval);
-    room.battleActive = false;
-    // Remove room after delay
-    setTimeout(function () {
-      delete rooms[player.roomCode];
-    }, 5000);
-  }
+  const roomCode = player.roomCode;
+  const room = roomCode ? rooms[roomCode] : null;
   delete players[playerId];
+  if (!room) return;
+
+  // Remove this player from the room's player list
+  const idx = room.players.indexOf(playerId);
+  if (idx !== -1) room.players.splice(idx, 1);
+
+  // No opponents left (e.g. creator left while waiting) -> delete room immediately
+  if (room.players.length === 0) {
+    if (room.sprintInterval) clearInterval(room.sprintInterval);
+    stopTimer(room);
+    delete rooms[roomCode];
+    return;
+  }
+
+  broadcast(room, { type: 'opponentLeft' });
+  stopTimer(room);
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  room.battleActive = false;
+  // Remove room after delay
+  setTimeout(function () {
+    delete rooms[roomCode];
+  }, 5000);
 }
 
 /* ==================== MESSAGING ==================== */
@@ -719,7 +742,7 @@ function serveFile(filePath, res, allow404) {
 
 const server = http.createServer(function (req, res) {
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
-  if (urlPath === '/' || urlPath === '/client.html' || urlPath === '/index.html') {
+  if (urlPath === '/' || urlPath === '/client.html') {
     serveFile(path.join(__dirname, 'client.html'), res);
     return;
   }
@@ -753,9 +776,12 @@ wss.on('connection', function connection(ws) {
     }
 
     switch (message.type) {
-      case 'setName':
-        players[playerId].name = message.name;
+      case 'setName': {
+        let nm = (typeof message.name === 'string') ? message.name.trim() : '';
+        if (nm.length > 20) nm = nm.slice(0, 20);
+        players[playerId].name = nm || 'Player';
         break;
+      }
 
       case 'createRoom': {
         const settings = message.settings || { timer: 6, sifir: 0, difficulty: 'random' };
@@ -842,5 +868,5 @@ function generatePlayerId() {
 }
 
 server.listen(PORT, function () {
-  console.log('ASMD Sifir Hero Arena server running on port ' + PORT);
+  console.log('ASMD Times Table Hero Arena server running on port ' + PORT);
 });
