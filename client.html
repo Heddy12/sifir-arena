@@ -435,6 +435,8 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .mode-toggle-group{display:flex;gap:6px;margin-bottom:16px;}
 .mode-btn{flex:1;padding:10px 8px;border:2px solid var(--border);border-radius:8px;background:var(--bg-card-2);color:var(--text-dim);font-size:0.72rem;font-weight:bold;text-transform:uppercase;letter-spacing:1px;cursor:pointer;font-family:inherit;transition:all 0.3s;position:relative;overflow:hidden;}
 .mode-btn:hover{border-color:var(--neon-cyan);color:var(--text);}
+.mode-btn:disabled{cursor:not-allowed;opacity:0.62;}
+.mode-btn:disabled:hover{transform:none;}
 .mode-btn .mode-icon{font-size:1.1rem;display:block;margin-bottom:4px;}
 .mode-btn .mode-label{font-size:0.6rem;letter-spacing:1px;display:block;margin-top:2px;color:var(--text-dim);}
 .mode-btn.active{border-color:var(--neon-cyan);color:var(--neon-cyan);box-shadow:var(--glow-cyan);background:linear-gradient(135deg,rgba(0,240,255,0.12),rgba(0,128,255,0.06));}
@@ -1641,40 +1643,54 @@ function updateModeDesc(mode) {
 }
 
 /* ==================== MODE TOGGLE ==================== */
-function initModeToggle() {
+function applyModeState(mode) {
+  if (['ffa', 'solo', 'sprint'].indexOf(mode) === -1) mode = 'ffa';
   var ffaBtn = document.querySelector('.mode-btn.ffa');
-  var towerBtn = document.querySelector('.mode-btn.tower');
   var soloBtn = document.querySelector('.mode-btn.solo');
   var sprintBtn = document.querySelector('.mode-btn.sprint');
   if (!ffaBtn || !soloBtn) return;
 
-  function setMode(mode) {
-    STATE.gameMode = mode;
-    ffaBtn.classList.toggle('active', mode === 'ffa');
-    if (towerBtn) towerBtn.classList.toggle('active', mode === 'tower');
-    soloBtn.classList.toggle('active', mode === 'solo');
-    if (sprintBtn) sprintBtn.classList.toggle('active', mode === 'sprint');
-    updateModeDesc(mode);
-    updateWarriorDisplay(mode);
-    var isSolo = mode === 'solo';
-    document.getElementById('btn-create').style.display = (isSolo) ? 'none' : '';
-    document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
-    document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
-    document.getElementById('connect-status').style.display = isSolo ? 'none' : '';
-    document.getElementById('solo-high-score').style.display = isSolo ? '' : 'none';
-    document.getElementById('setting-sprinttime').style.display = (mode === 'sprint') ? '' : 'none';
-    if (isSolo) {
-      try {
-        document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
-      } catch(e) {}
-    }
-    updateRankedStatus();
+  STATE.gameMode = mode;
+  STATE.isSprint = mode === 'sprint';
+  ffaBtn.classList.toggle('active', mode === 'ffa');
+  soloBtn.classList.toggle('active', mode === 'solo');
+  if (sprintBtn) sprintBtn.classList.toggle('active', mode === 'sprint');
+  updateModeDesc(mode);
+  updateWarriorDisplay(mode);
+  var isSolo = mode === 'solo';
+  document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
+  document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
+  document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
+  document.getElementById('connect-status').style.display = isSolo ? 'none' : '';
+  document.getElementById('solo-high-score').style.display = isSolo ? '' : 'none';
+  document.getElementById('setting-sprinttime').style.display = mode === 'sprint' ? '' : 'none';
+  document.getElementById('header-subtitle').textContent = mode === 'solo'
+    ? 'SINGLE PLAYER - TIMES TOWER'
+    : (mode === 'sprint' ? 'SPRINT - 1-MINUTE BLITZ' : 'MULTIPLAYER - FIGHTER EDITION');
+  if (isSolo) {
+    try {
+      document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
+    } catch(e) {}
   }
+  updateRankedStatus();
+}
 
-  ffaBtn.addEventListener('click', function () { setMode('ffa'); });
-  if (towerBtn) towerBtn.addEventListener('click', function () { setMode('tower'); });
-  soloBtn.addEventListener('click', function () { setMode('solo'); });
-  if (sprintBtn) sprintBtn.addEventListener('click', function () { setMode('sprint'); });
+function setModeControlsLocked(locked) {
+  document.querySelectorAll('.mode-btn').forEach(function (button) { button.disabled = !!locked; });
+  ['setting-timer', 'setting-sifir', 'setting-difficulty', 'setting-sprinttime'].forEach(function (id) {
+    document.getElementById(id).disabled = !!locked;
+  });
+}
+
+function initModeToggle() {
+  var ffaBtn = document.querySelector('.mode-btn.ffa');
+  var soloBtn = document.querySelector('.mode-btn.solo');
+  var sprintBtn = document.querySelector('.mode-btn.sprint');
+  if (!ffaBtn || !soloBtn) return;
+
+  ffaBtn.addEventListener('click', function () { applyModeState('ffa'); });
+  soloBtn.addEventListener('click', function () { applyModeState('solo'); });
+  if (sprintBtn) sprintBtn.addEventListener('click', function () { applyModeState('sprint'); });
 }
 
 /* ==================== WEBSOCKET CONNECTION ==================== */
@@ -1756,6 +1772,18 @@ function resetRemoteSession() {
   document.getElementById('vs-overlay').classList.remove('show');
   document.getElementById('sprint-timer').classList.remove('show', 'warning');
   setWinnerRankedStatus('', '');
+  setModeControlsLocked(false);
+}
+
+function applyAuthoritativeRoomState(message) {
+  if (message && message.settings) STATE.settings = message.settings;
+  var roomMode = message && (message.gameMode || (message.settings && message.settings.gameMode));
+  if (!roomMode && message && message.sprint) roomMode = 'sprint';
+  applyModeState(roomMode === 'sprint' ? 'sprint' : 'ffa');
+  if (STATE.settings && STATE.settings.timer) {
+    document.getElementById('hdr-timer').textContent = STATE.settings.timer + 's';
+  }
+  setModeControlsLocked(true);
 }
 
 /* ==================== MESSAGE HANDLER ==================== */
@@ -1776,24 +1804,26 @@ function handleMessage(msg) {
       break;
 
     case 'roomCreated':
+      applyAuthoritativeRoomState(msg);
       STATE.roomCode = msg.code;
       document.getElementById('hdr-room').textContent = msg.code;
       showRoomCode(msg.code);
       break;
 
     case 'roomJoined':
+      applyAuthoritativeRoomState(msg);
       STATE.roomCode = msg.code;
       document.getElementById('hdr-room').textContent = msg.code;
       setConnectStatus('Joined room! Waiting for host to start...', 'success');
       break;
 
     case 'joinError':
+      setModeControlsLocked(false);
       setConnectStatus(msg.error, 'error');
       break;
 
     case 'opponentJoined':
-      STATE.settings = msg.settings;
-      document.getElementById('hdr-timer').textContent = STATE.settings.timer + 's';
+      applyAuthoritativeRoomState(msg);
       setConnectStatus('Opponent joined! Starting battle...', 'success');
       // Host (creator) starts the battle; joiner must NOT also start
       if (STATE.you === 0) {
@@ -1806,11 +1836,12 @@ function handleMessage(msg) {
       break;
 
     case 'gameStart':
+      applyAuthoritativeRoomState(msg);
       STATE.you = msg.you;
       STATE.players = msg.players;
       STATE.yourCards = msg.yourCards;
       STATE.battleActive = true;
-      STATE.isSprint = !!msg.sprint;
+      STATE.isSprint = STATE.gameMode === 'sprint';
       clearWeakTableReport();
       updateAllUI();
       if (STATE.isSprint) {
@@ -2304,6 +2335,7 @@ function goHome() {
   var magicSections = document.querySelectorAll('.magic-cards-section');
   hpSections.forEach(function (el) { el.style.display = ''; });
   magicSections.forEach(function (el) { el.style.display = ''; });
+  setModeControlsLocked(false);
   Sound.click();
 }
 

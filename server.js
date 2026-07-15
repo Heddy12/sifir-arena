@@ -331,6 +331,8 @@ function startBattle(room) {
   sendToPlayer(p1Id, {
     type: 'gameStart',
     you: 0,
+    gameMode: room.gameMode,
+    settings: room.settings,
     players: room.gameState.players,
     yourCards: p1Cards
   });
@@ -338,6 +340,8 @@ function startBattle(room) {
   sendToPlayer(p2Id, {
     type: 'gameStart',
     you: 1,
+    gameMode: room.gameMode,
+    settings: room.settings,
     players: room.gameState.players,
     yourCards: p2Cards
   });
@@ -644,8 +648,8 @@ function startSprint(room) {
   room.battleActive = true;
   room.sprintTimeLeft = sprintDuration;
 
-  sendToPlayer(p1Id, { type: 'gameStart', you: 0, players: room.gameState.players, yourCards: [], sprint: true });
-  sendToPlayer(p2Id, { type: 'gameStart', you: 1, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
 
   // Generate first question for each player
   room.sprintQuestions[0] = generateQuestion(room.settings.sifir, room.settings.difficulty);
@@ -987,7 +991,7 @@ wss.on('connection', function connection(ws) {
       case 'createRoom': {
         const settings = normalizeSettings(message.settings);
         const code = createRoom(playerId, settings);
-        sendToPlayer(playerId, { type: 'roomCreated', code: code });
+        sendToPlayer(playerId, { type: 'roomCreated', code: code, gameMode: settings.gameMode, settings: settings });
         break;
       }
 
@@ -997,19 +1001,26 @@ wss.on('connection', function connection(ws) {
         if (joinResult.error) {
           sendToPlayer(playerId, { type: 'joinError', error: joinResult.error });
         } else {
-          sendToPlayer(playerId, { type: 'roomJoined', code: code });
           const room = rooms[code];
+          sendToPlayer(playerId, {
+            type: 'roomJoined',
+            code: code,
+            gameMode: room.gameMode,
+            settings: room.settings
+          });
           if (room && room.players.length === 2) {
             const p1Id = room.players[0];
             const p2Id = room.players[1];
             sendToPlayer(p1Id, {
               type: 'opponentJoined',
               opponentName: players[p2Id].name,
+              gameMode: room.gameMode,
               settings: room.settings
             });
             sendToPlayer(p2Id, {
               type: 'opponentJoined',
               opponentName: players[p1Id].name,
+              gameMode: room.gameMode,
               settings: room.settings
             });
           }
