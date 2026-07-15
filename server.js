@@ -149,20 +149,25 @@ function normalizeSettings(settings) {
   const allowedTimers = [4, 6, 8, 10, 20];
   const allowedDifficulties = ['random', 'easy', 'medium', 'hard'];
   const allowedModes = ['ffa', 'sprint'];
+  const gameMode = allowedModes.includes(source.gameMode) ? source.gameMode : 'ffa';
+  const normalizedSprintTime = [30, 45, 60].includes(sprintTime) ? sprintTime : SPRINT_DURATION;
 
   return {
-    timer: allowedTimers.includes(timer) ? timer : 20,
+    timer: gameMode === 'sprint' ? normalizedSprintTime : (allowedTimers.includes(timer) ? timer : 20),
     sifir: Number.isInteger(sifir) && sifir >= 0 && sifir <= 12 ? sifir : 0,
     difficulty: allowedDifficulties.includes(source.difficulty) ? source.difficulty : 'random',
-    gameMode: allowedModes.includes(source.gameMode) ? source.gameMode : 'ffa',
-    sprintTime: [30, 45, 60].includes(sprintTime) ? sprintTime : SPRINT_DURATION
+    gameMode: gameMode,
+    sprintTime: normalizedSprintTime
   };
 }
 
 function isRankedSettings(settings, mode) {
   const source = settings && typeof settings === 'object' ? settings : {};
-  if (Number(source.timer) !== 20 || Number(source.sifir) !== 0 || source.difficulty !== 'random') return false;
-  return mode !== 'sprint' || Number(source.sprintTime) === SPRINT_DURATION;
+  if (Number(source.sifir) !== 0 || source.difficulty !== 'random') return false;
+  if (mode === 'sprint') {
+    return Number(source.timer) === SPRINT_DURATION && Number(source.sprintTime) === SPRINT_DURATION;
+  }
+  return Number(source.timer) === 20;
 }
 
 function normalizeResultStats(stats) {

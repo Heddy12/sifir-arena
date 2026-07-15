@@ -115,7 +115,7 @@ git push -u origin main
 
 - Open the trophy button on the landing page or result screen
 - Separate rankings are available for Single Player, Multiplayer, and Sprint
-- Ranked preset: All Tables, Random difficulty, 20s question timer, and 60s Sprint
+- Ranked preset: All Tables and Random difficulty, with a 20s timer for Single Player/Multiplayer and one unified 60s timer for Sprint
 - Custom settings remain playable but are marked **Unranked**
 - Single Player stores the best winning score, Sprint stores the best individual result, and Multiplayer counts wins and games played
 - If PostgreSQL is unavailable, normal gameplay and room creation continue to work
