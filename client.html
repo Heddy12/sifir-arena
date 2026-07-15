@@ -38,6 +38,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .connect-screen.show{display:flex;}
 .connect-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:28px 30px;max-width:430px;width:100%;text-align:center;}
 .connect-section{margin-bottom:14px;text-align:left;}
+.mode-selection-section{display:none;}
 .connect-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:8px;font-weight:bold;}
 .connect-input{width:100%;padding:11px 14px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.95rem;font-family:inherit;transition:border-color 0.2s,box-shadow 0.2s;}
 .connect-input:focus{outline:none;border-color:var(--neon-cyan);box-shadow:0 0 0 3px rgba(0,240,255,0.12);}
@@ -54,15 +55,17 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .join-box .connect-input{margin-bottom:10px;}
 .room-code-display{font-size:2rem;font-weight:bold;letter-spacing:6px;color:var(--neon-yellow);text-shadow:var(--glow-yellow);padding:16px;background:var(--bg-card-2);border:2px dashed var(--neon-yellow);border-radius:8px;margin:12px 0;}
 .connect-waiting{display:none;text-align:center;}
-.connect-card.waiting>:not(.connect-waiting){display:none!important;}
+.connect-card.waiting>:not(.connect-waiting):not(.mode-back-btn){display:none!important;}
 .connect-card.waiting>.connect-waiting{display:block;}
+.mode-back-btn{position:absolute;top:12px;left:14px;z-index:3;padding:7px 10px;border:1px solid var(--border);border-radius:7px;background:rgba(10,10,15,0.72);color:var(--text-dim);font-family:inherit;font-size:0.58rem;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;cursor:pointer;transition:all 0.2s;}
+.mode-back-btn:hover{border-color:var(--neon-cyan);color:var(--neon-cyan);}
 .copy-room-btn{margin-top:4px;padding:10px 18px;border:1px solid var(--neon-cyan);border-radius:7px;background:rgba(0,240,255,0.08);color:var(--neon-cyan);font-family:inherit;font-weight:bold;letter-spacing:1px;text-transform:uppercase;cursor:pointer;}
 .copy-room-btn:hover{background:rgba(0,240,255,0.18);box-shadow:var(--glow-cyan);}
 .connect-status{font-size:0.82rem;color:var(--text-dim);margin-top:10px;min-height:20px;letter-spacing:0.5px;}
 .connect-status.error{color:var(--neon-red);}
 .connect-status.success{color:var(--neon-green);}
-.settings-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-.settings-row select{padding:9px 6px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.78rem;font-family:inherit;cursor:pointer;transition:border-color 0.2s;}
+.settings-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.settings-row select{width:100%;min-width:0;padding:9px 6px;background:var(--bg-card-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.78rem;font-family:inherit;cursor:pointer;transition:border-color 0.2s;}
 .settings-row select:focus{outline:none;border-color:var(--neon-cyan);}
 
 /* GAME LAYOUT */
@@ -590,13 +593,14 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 <!-- CONNECT SCREEN -->
 <div class="connect-screen" id="connect-screen">
   <div class="connect-card modern" id="connect-card">
+    <button class="mode-back-btn" id="mode-back-btn" type="button">← Back to Modes</button>
     <img class="title-banner" src="images/title.png" alt="Times Table Hero Arena" onerror="this.style.display='none';">
-    <div class="connect-title-sub">⚔ Multiplayer Battle Arena ⚔</div>
+    <div class="connect-title-sub" id="selected-mode-title">⚔ Multiplayer Battle Arena ⚔</div>
     <div class="connect-section">
       <div class="connect-label">Your Name</div>
       <input type="text" class="connect-input" id="player-name" placeholder="Enter your name" maxlength="20" value="Player">
     </div>
-    <div class="connect-section">
+    <div class="connect-section mode-selection-section" aria-hidden="true">
       <div class="connect-label">Game Mode</div>
       <div class="mode-toggle-group" id="mode-toggle">
         <button class="mode-btn active ffa" data-mode="ffa">
@@ -659,8 +663,8 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
-    <div class="connect-divider">or join with code</div>
-    <div class="join-box">
+    <div class="connect-divider" id="join-divider">or join with code</div>
+    <div class="join-box" id="join-box">
       <input type="text" class="connect-input" id="join-code" placeholder="Enter room code" maxlength="6" style="text-transform:uppercase;">
       <button class="connect-btn btn-join" id="btn-join" disabled>🔗 Join Room</button>
     </div>
@@ -1661,12 +1665,17 @@ function applyModeState(mode) {
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
+  document.getElementById('join-divider').style.display = isSolo ? 'none' : '';
+  document.getElementById('join-box').style.display = isSolo ? 'none' : '';
   document.getElementById('connect-status').style.display = isSolo ? 'none' : '';
   document.getElementById('solo-high-score').style.display = isSolo ? '' : 'none';
   document.getElementById('setting-sprinttime').style.display = mode === 'sprint' ? '' : 'none';
   document.getElementById('header-subtitle').textContent = mode === 'solo'
     ? 'SINGLE PLAYER - TIMES TOWER'
     : (mode === 'sprint' ? 'SPRINT - 1-MINUTE BLITZ' : 'MULTIPLAYER - FIGHTER EDITION');
+  document.getElementById('selected-mode-title').textContent = mode === 'solo'
+    ? '🏰 Single Player · Times Tower'
+    : (mode === 'sprint' ? '⏱ Sprint · 1-Minute Blitz' : '⚔ Multiplayer Battle Arena ⚔');
   if (isSolo) {
     try {
       document.getElementById('solo-high-score').textContent = 'Best Score: ' + (parseInt(localStorage.getItem('soloHighScore') || '0'));
@@ -2650,10 +2659,13 @@ function initEventListeners() {
     card.addEventListener('click', function () {
       Sound.init(); Sound.click();
       var mode = this.getAttribute('data-mode');
+      applyModeState(mode);
       showConnectScreen();
-      var btn = document.querySelector('.mode-btn.' + mode);
-      if (btn) btn.click();
     });
+  });
+
+  document.getElementById('mode-back-btn').addEventListener('click', function () {
+    goHome();
   });
 
   // Create room
