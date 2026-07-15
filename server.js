@@ -16,6 +16,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
+const leaderboard = require('./leaderboard-store');
 
 const PORT = process.env.PORT || 3000;
 
@@ -29,6 +30,13 @@ const WRONG_DAMAGE = 5;
 const TIMEOUT_DAMAGE = 8;
 const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
+
+leaderboard.initialize().then(function (ready) {
+  if (ready) console.log('Leaderboard database ready');
+  else console.log('Leaderboard disabled: DATABASE_URL is not configured');
+}).catch(function (error) {
+  console.error('Leaderboard database unavailable:', error.message);
+});
 
 /* ==================== CARD POOL ==================== */
 const CARD_POOL = [
@@ -133,7 +141,132 @@ function getLearningReports(room) {
   return room.gameState.players.map(buildLearningReport);
 }
 
+function normalizeSettings(settings) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  const timer = Number(source.timer);
+  const sifir = Number(source.sifir);
+  const sprintTime = Number(source.sprintTime);
+  const allowedTimers = [4, 6, 8, 10, 20];
+  const allowedDifficulties = ['random', 'easy', 'medium', 'hard'];
+  const allowedModes = ['ffa', 'sprint'];
+
+  return {
+    timer: allowedTimers.includes(timer) ? timer : 20,
+    sifir: Number.isInteger(sifir) && sifir >= 0 && sifir <= 12 ? sifir : 0,
+    difficulty: allowedDifficulties.includes(source.difficulty) ? source.difficulty : 'random',
+    gameMode: allowedModes.includes(source.gameMode) ? source.gameMode : 'ffa',
+    sprintTime: [30, 45, 60].includes(sprintTime) ? sprintTime : SPRINT_DURATION
+  };
+}
+
+function isRankedSettings(settings, mode) {
+  const source = settings && typeof settings === 'object' ? settings : {};
+  if (Number(source.timer) !== 20 || Number(source.sifir) !== 0 || source.difficulty !== 'random') return false;
+  return mode !== 'sprint' || Number(source.sprintTime) === SPRINT_DURATION;
+}
+
+function normalizeResultStats(stats) {
+  const source = stats && typeof stats === 'object' ? stats : {};
+  const score = Number(source.score);
+  const correct = Number(source.correct);
+  const wrong = Number(source.wrong);
+  if (!Number.isInteger(score) || score < 0 || score > 100000) return null;
+  if (!Number.isInteger(correct) || correct < 0 || correct > 10000) return null;
+  if (!Number.isInteger(wrong) || wrong < 0 || wrong > 10000) return null;
+  if (score !== correct * SCORE_PER_CORRECT) return null;
+  const attempts = correct + wrong;
+  return {
+    score: score,
+    correct: correct,
+    wrong: wrong,
+    accuracy: attempts > 0 ? Math.round((correct / attempts) * 100) : 0
+  };
+}
+
+function leaderboardProfile(playerId) {
+  const player = players[playerId];
+  if (!player || !leaderboard.normalizeProfileId(player.profileId)) return null;
+  return { profileId: player.profileId, name: player.name || 'Player' };
+}
+
+function recordRoomLeaderboard(room, winnerIdx) {
+  if (!room || room.leaderboardRecorded) return;
+  room.leaderboardRecorded = true;
+  const mode = room.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
+  if (!isRankedSettings(room.settings, room.gameMode)) {
+    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: false, recorded: false, reason: 'custom-settings' });
+    return;
+  }
+
+  let operation;
+  if (mode === 'sprint') {
+    const writes = room.players.map(function (playerId, index) {
+      const profile = leaderboardProfile(playerId);
+      const stats = room.gameState.players[index];
+      if (!profile || !stats) return Promise.resolve(null);
+      const attempts = stats.correct + stats.wrong;
+      return leaderboard.recordBest(profile, 'sprint', {
+        score: stats.score,
+        correct: stats.correct,
+        wrong: stats.wrong,
+        accuracy: attempts > 0 ? Math.round((stats.correct / attempts) * 100) : 0
+      });
+    });
+    operation = Promise.all(writes);
+  } else {
+    const participants = room.players.map(function (playerId, index) {
+      const profile = leaderboardProfile(playerId);
+      if (!profile) return null;
+      profile.winner = index === winnerIdx;
+      return profile;
+    }).filter(Boolean);
+    operation = leaderboard.recordMultiplayerGame(participants);
+  }
+
+  operation.then(function () {
+    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: true, recorded: true });
+  }).catch(function (error) {
+    console.error('Leaderboard result was not saved:', error.message);
+    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: true, recorded: false, reason: 'database-unavailable' });
+  });
+}
+
+function submitSoloLeaderboardResult(playerId, message) {
+  const profile = leaderboardProfile(playerId);
+  const settings = message && message.settings;
+  const stats = normalizeResultStats(message && message.stats);
+  if (!profile) {
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'profile-required' });
+    return;
+  }
+  if (!message.won) {
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: false, recorded: false, reason: 'win-required' });
+    return;
+  }
+  if (!isRankedSettings(settings, 'solo')) {
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: false, recorded: false, reason: 'custom-settings' });
+    return;
+  }
+  if (!stats) {
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'invalid-result' });
+    return;
+  }
+  leaderboard.recordBest(profile, 'solo', stats).then(function (result) {
+    sendToPlayer(playerId, {
+      type: 'leaderboardResult',
+      mode: 'solo',
+      eligible: true,
+      recorded: true,
+      improved: result.improved
+    });
+  }).catch(function (error) {
+    console.error('Solo leaderboard result was not saved:', error.message);
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'database-unavailable' });
+  });
+}
+
 function createRoom(playerId, settings) {
+  settings = normalizeSettings(settings);
   const code = generateRoomCode();
   rooms[code] = {
     code: code,
@@ -152,7 +285,8 @@ function createRoom(playerId, settings) {
     timerFrozen: false,
     sprintInterval: null,
     sprintTimeLeft: settings.sprintTime || SPRINT_DURATION,
-    sprintQuestions: [null, null]
+    sprintQuestions: [null, null],
+    leaderboardRecorded: false
   };
   players[playerId].roomCode = code;
   players[playerId].playerIdx = 0;
@@ -160,6 +294,7 @@ function createRoom(playerId, settings) {
 }
 
 function joinRoom(playerId, code) {
+  code = typeof code === 'string' ? code.trim().toUpperCase() : '';
   const room = rooms[code];
   if (!room) return { error: 'Room not found' };
   if (room.players.length >= 2) return { error: 'Room is full' };
@@ -171,6 +306,7 @@ function joinRoom(playerId, code) {
 
 function startBattle(room) {
   if (room.gameMode === 'sprint') { startSprint(room); return; }
+  room.leaderboardRecorded = false;
   room.timerFrozen = false;
   const p1Id = room.players[0];
   const p2Id = room.players[1];
@@ -491,6 +627,7 @@ function handleCardActivate(room, playerId, cardIdx) {
 /* ==================== SPRINT MODE ==================== */
 function startSprint(room) {
   if (room.sprintInterval) clearInterval(room.sprintInterval);
+  room.leaderboardRecorded = false;
   room.timerFrozen = false;
   const sprintDuration = room.settings.sprintTime || SPRINT_DURATION;
   const p1Id = room.players[0];
@@ -633,6 +770,7 @@ function endSprint(room) {
     winnerIdx: winnerIdx,
     winnerName: winner.name,
     sprint: true,
+    ranked: isRankedSettings(room.settings, 'sprint'),
     learningReports: getLearningReports(room),
     stats: {
       score: winner.score,
@@ -641,6 +779,7 @@ function endSprint(room) {
       accuracy: winner.correct + winner.wrong > 0 ? Math.round((winner.correct / (winner.correct + winner.wrong)) * 100) : 0
     }
   });
+  recordRoomLeaderboard(room, winnerIdx);
 }
 
 function checkWin(room) {
@@ -654,6 +793,7 @@ function checkWin(room) {
         type: 'gameOver',
         winnerIdx: winnerIdx,
         winnerName: winner.name,
+        ranked: isRankedSettings(room.settings, 'ffa'),
         learningReports: getLearningReports(room),
         stats: {
           score: winner.score,
@@ -662,6 +802,7 @@ function checkWin(room) {
           accuracy: winner.correct + winner.wrong > 0 ? Math.round((winner.correct / (winner.correct + winner.wrong)) * 100) : 0
         }
       });
+      recordRoomLeaderboard(room, winnerIdx);
       return true;
     }
   }
@@ -740,15 +881,69 @@ function serveFile(filePath, res, allow404) {
   });
 }
 
+function sendJson(res, statusCode, body) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(body));
+}
+
+async function handleLeaderboardRequest(req, res) {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+  let requestUrl;
+  try {
+    requestUrl = new URL(req.url, 'http://localhost');
+  } catch (error) {
+    sendJson(res, 400, { error: 'Invalid request URL' });
+    return;
+  }
+  const mode = requestUrl.searchParams.get('mode') || 'solo';
+  if (!['solo', 'multiplayer', 'sprint'].includes(mode)) {
+    sendJson(res, 400, { error: 'Invalid leaderboard mode' });
+    return;
+  }
+  const requestedLimit = Number(requestUrl.searchParams.get('limit'));
+  const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 50)) : 10;
+  try {
+    const entries = await leaderboard.getLeaderboard(mode, limit);
+    sendJson(res, 200, { mode: mode, entries: entries });
+  } catch (error) {
+    const unavailable = error.code === 'LEADERBOARD_UNAVAILABLE';
+    sendJson(res, unavailable ? 503 : 500, {
+      error: unavailable ? 'Leaderboard is temporarily unavailable' : 'Unable to load leaderboard'
+    });
+  }
+}
+
 const server = http.createServer(function (req, res) {
-  const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bad request');
+    return;
+  }
   if (urlPath === '/' || urlPath === '/client.html') {
     serveFile(path.join(__dirname, 'client.html'), res);
     return;
   }
   if (urlPath === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', rooms: Object.keys(rooms).length, players: Object.keys(players).length }));
+    const leaderboardStatus = leaderboard.status();
+    sendJson(res, 200, {
+      status: 'ok',
+      rooms: Object.keys(rooms).length,
+      players: Object.keys(players).length,
+      leaderboard: { configured: leaderboardStatus.configured, ready: leaderboardStatus.ready }
+    });
+    return;
+  }
+  if (urlPath === '/api/leaderboard') {
+    handleLeaderboardRequest(req, res);
     return;
   }
   const resolved = path.resolve(__dirname, '.' + (urlPath.startsWith('/') ? urlPath : '/' + urlPath));
@@ -763,11 +958,12 @@ const wss = new WebSocket.Server({ server: server });
 
 wss.on('connection', function connection(ws) {
   const playerId = generatePlayerId();
-  players[playerId] = { ws: ws, name: '', roomCode: null, playerIdx: 0 };
+  players[playerId] = { ws: ws, name: '', profileId: null, roomCode: null, playerIdx: 0 };
 
   sendToPlayer(playerId, { type: 'connected', playerId: playerId });
 
   ws.on('message', function incoming(rawMessage) {
+    if (!players[playerId]) return;
     let message;
     try {
       message = JSON.parse(rawMessage);
@@ -780,23 +976,29 @@ wss.on('connection', function connection(ws) {
         let nm = (typeof message.name === 'string') ? message.name.trim() : '';
         if (nm.length > 20) nm = nm.slice(0, 20);
         players[playerId].name = nm || 'Player';
+        players[playerId].profileId = leaderboard.normalizeProfileId(message.profileId);
         break;
       }
 
+      case 'submitSoloResult':
+        submitSoloLeaderboardResult(playerId, message);
+        break;
+
       case 'createRoom': {
-        const settings = message.settings || { timer: 6, sifir: 0, difficulty: 'random' };
+        const settings = normalizeSettings(message.settings);
         const code = createRoom(playerId, settings);
         sendToPlayer(playerId, { type: 'roomCreated', code: code });
         break;
       }
 
       case 'joinRoom': {
-        const joinResult = joinRoom(playerId, message.code);
+        const code = typeof message.code === 'string' ? message.code.trim().toUpperCase() : '';
+        const joinResult = joinRoom(playerId, code);
         if (joinResult.error) {
           sendToPlayer(playerId, { type: 'joinError', error: joinResult.error });
         } else {
-          sendToPlayer(playerId, { type: 'roomJoined', code: message.code });
-          const room = rooms[message.code];
+          sendToPlayer(playerId, { type: 'roomJoined', code: code });
+          const room = rooms[code];
           if (room && room.players.length === 2) {
             const p1Id = room.players[0];
             const p2Id = room.players[1];
@@ -861,6 +1063,14 @@ wss.on('connection', function connection(ws) {
   ws.on('close', function () {
     handleDisconnect(playerId);
   });
+
+  ws.on('error', function () {
+    handleDisconnect(playerId);
+  });
+});
+
+wss.on('error', function (error) {
+  console.error('WebSocket server error:', error.message);
 });
 
 function generatePlayerId() {

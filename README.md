@@ -8,6 +8,7 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 |------|-------------|
 | `server.js` | WebSocket server (Node.js) — room management, game logic, state sync |
 | `client.html` | Game client (self-contained) — connect screen, Solo Quest, Sprint & multiplayer battle arena, real-time sync |
+| `leaderboard-store.js` | Persistent PostgreSQL leaderboard storage |
 | `package.json` | Node.js dependencies and scripts |
 
 ## Quick Start (Local Testing)
@@ -20,10 +21,14 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 # 1. Install dependencies
 npm install
 
-# 2. Start server
+# 2. Optional: enable the global leaderboard
+# PowerShell: $env:DATABASE_URL='postgresql://...'
+# macOS/Linux: export DATABASE_URL='postgresql://...'
+
+# 3. Start server
 npm start
 
-# 3. Open in browser
+# 4. Open in browser
 # Laptop 1: http://localhost:3000
 # Laptop 2: http://<LAPTOP1_IP>:3000 (same WiFi network)
 ```
@@ -50,8 +55,9 @@ git push -u origin main
    - **Start Command:** `node server.js`
    - **Plan:** `Free`
 5. Click **Create Web Service**
-6. Wait for deployment to finish (2-3 minutes)
-7. You'll get a URL like: `https://sifir-arena.onrender.com`
+6. Add a secret environment variable named `DATABASE_URL` using the connection string from your hosted PostgreSQL provider (Supabase, Neon, or another provider)
+7. Wait for deployment to finish (2-3 minutes)
+8. You'll get a URL like: `https://sifir-arena.onrender.com`
 
 ### Step 3: Play!
 1. Both laptops open the Render URL in browser
@@ -103,6 +109,16 @@ git push -u origin main
 - **Room-based:** 6-char room code, max 2 players per room
 - **WebSocket:** Real-time bidirectional communication
 - **Auto-cleanup:** Rooms deleted after disconnect + 5s delay
+- **Global leaderboard:** Top 10 records are stored in PostgreSQL when `DATABASE_URL` is configured
+
+## Ranked Leaderboard
+
+- Open the trophy button on the landing page or result screen
+- Separate rankings are available for Single Player, Multiplayer, and Sprint
+- Ranked preset: All Tables, Random difficulty, 20s question timer, and 60s Sprint
+- Custom settings remain playable but are marked **Unranked**
+- Single Player stores the best winning score, Sprint stores the best individual result, and Multiplayer counts wins and games played
+- If PostgreSQL is unavailable, normal gameplay and room creation continue to work
 
 ## Troubleshooting
 
@@ -123,7 +139,7 @@ git push -u origin main
 - **Server:** Node.js + ws (WebSocket library)
 - **Client:** Vanilla HTML/CSS/JS (no frameworks)
 - **Audio:** Web Audio API (no external files)
-- **Storage:** None (server-authoritative, state in memory)
+- **Storage:** PostgreSQL for leaderboard data; active rooms remain server-authoritative in memory
 
 ## License
 MIT

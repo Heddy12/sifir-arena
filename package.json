@@ -5,9 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node leaderboard-store.test.js"
   },
   "dependencies": {
+    "pg": "^8.22.0",
     "ws": "^8.16.0"
   },
   "engines": {
@@ -21,5 +23,8 @@
     "multiplayer",
     "sifir"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
+  }
 }
