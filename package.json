@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node leaderboard-store.test.js && node server-auth.test.js && node client-audio.test.js"
+    "test": "node bot-catalog.test.js && node leaderboard-store.test.js && node server-auth.test.js && node server-quick-match.test.js && node client-audio.test.js"
   },
   "dependencies": {
     "pg": "^8.22.0",

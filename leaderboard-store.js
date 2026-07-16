@@ -3,6 +3,7 @@
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const { promisify } = require('util');
+const botCatalog = require('./bot-catalog');
 
 const scryptAsync = promisify(crypto.scrypt);
 
@@ -164,6 +165,7 @@ async function registerAccount(input) {
   const password = normalizePassword(input && input.password);
   if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
   if (!playerName) throw authError('INVALID_PLAYER_NAME', 'Player ID mesti 3-20 aksara: huruf, nombor atau _.');
+  if (botCatalog.isReservedBotName(playerName)) throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
   if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
 
   await ensureSchema();
@@ -266,6 +268,7 @@ async function logoutSession(token) {
 async function initialize() {
   if (!connectionString) return false;
   await ensureSchema();
+  await seedArenaBots();
   return true;
 }
 
@@ -281,6 +284,31 @@ async function upsertProfile(client, profile) {
     [profileId, name]
   );
   return { profileId: profileId, name: name };
+}
+
+async function seedArenaBots() {
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    for (const bot of botCatalog.BOT_PROFILES) {
+      const profile = await upsertProfile(client, bot);
+      for (const mode of ['multiplayer', 'sprint']) {
+        await client.query(
+          `INSERT INTO leaderboard_stats (profile_id, mode, wins, games_played, updated_at)
+           VALUES ($1, $2, 0, 0, NOW())
+           ON CONFLICT (profile_id, mode) DO NOTHING`,
+          [profile.profileId, mode]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
 }
 
 function isBetterResult(mode, next, current) {

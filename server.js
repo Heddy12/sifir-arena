@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 const leaderboard = require('./leaderboard-store');
+const botCatalog = require('./bot-catalog');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_COOKIE = 'sifir_session';
@@ -36,6 +37,9 @@ const WRONG_DAMAGE = 5;
 const TIMEOUT_DAMAGE = 8;
 const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
+const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
+const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
+const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
 
 leaderboard.initialize().then(function (ready) {
   if (ready) console.log('Leaderboard database ready');
@@ -61,6 +65,7 @@ const CARD_POOL = [
 /* ==================== ROOM MANAGEMENT ==================== */
 const rooms = {};
 const players = {};
+const quickMatchQueue = [];
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -297,7 +302,13 @@ function createRoom(playerId, settings) {
     sprintInterval: null,
     sprintTimeLeft: settings.sprintTime || SPRINT_DURATION,
     sprintQuestions: [null, null],
-    leaderboardRecorded: false
+    sprintQuestionVersions: [0, 0],
+    botSprintTimers: [null, null],
+    leaderboardRecorded: false,
+    questionVersion: 0,
+    botActionTimers: [],
+    matchType: 'room',
+    botProfileId: null
   };
   players[playerId].roomCode = code;
   players[playerId].playerIdx = 0;
@@ -315,10 +326,129 @@ function joinRoom(playerId, code) {
   return { success: true, room: room };
 }
 
+function removeQuickMatchEntry(playerId) {
+  const index = quickMatchQueue.findIndex(function (entry) { return entry.playerId === playerId; });
+  if (index === -1) return null;
+  const entry = quickMatchQueue.splice(index, 1)[0];
+  clearTimeout(entry.timeout);
+  return entry;
+}
+
+function cancelQuickMatch(playerId, notify) {
+  const removed = removeQuickMatchEntry(playerId);
+  if (removed && notify) sendToPlayer(playerId, { type: 'quickMatchCancelled' });
+  return !!removed;
+}
+
+function rankedQuickMatchSettings(gameMode) {
+  if (gameMode === 'sprint') {
+    return normalizeSettings({ timer: SPRINT_DURATION, sprintTime: SPRINT_DURATION, sifir: 0, difficulty: 'random', gameMode: 'sprint' });
+  }
+  return normalizeSettings(QUICK_MATCH_SETTINGS);
+}
+
+function sendQuickMatchFound(playerId, opponentId, you, room) {
+  sendToPlayer(playerId, {
+    type: 'quickMatchFound',
+    opponentName: players[opponentId].name,
+    you: you,
+    gameMode: room.gameMode,
+    settings: room.settings
+  });
+}
+
+function startQuickMatchRoom(firstPlayerId, secondPlayerId, botProfileId, gameMode) {
+  const settings = rankedQuickMatchSettings(gameMode);
+  const code = createRoom(firstPlayerId, settings);
+  const joined = joinRoom(secondPlayerId, code);
+  if (joined.error) return null;
+  const room = rooms[code];
+  room.matchType = 'quick';
+  room.botProfileId = botProfileId || null;
+  sendQuickMatchFound(firstPlayerId, secondPlayerId, 0, room);
+  sendQuickMatchFound(secondPlayerId, firstPlayerId, 1, room);
+  setTimeout(function () {
+    if (rooms[code] === room && room.players.length === 2 && !room.battleActive) startBattle(room);
+  }, QUICK_MATCH_START_DELAY_MS);
+  return room;
+}
+
+function createBotOpponent(profile) {
+  const botId = 'bot_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
+  const instance = botCatalog.createBotInstance(profile);
+  players[botId] = {
+    ws: null,
+    name: profile.name,
+    profileId: profile.profileId,
+    accountId: null,
+    roomCode: null,
+    playerIdx: 1,
+    isBot: true,
+    bot: instance
+  };
+  return botId;
+}
+
+function fallbackQuickMatchToBot(playerId) {
+  const entry = removeQuickMatchEntry(playerId);
+  const player = players[playerId];
+  if (!entry || !player || player.roomCode) return;
+  const profile = botCatalog.chooseBot();
+  const botId = createBotOpponent(profile);
+  const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode);
+  if (!room) {
+    delete players[botId];
+    sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to start Quick Match.' });
+  }
+}
+
+function requestQuickMatch(playerId, requestedMode) {
+  const player = players[playerId];
+  const gameMode = requestedMode === 'sprint' ? 'sprint' : 'ffa';
+  if (!player) return;
+  if (player.roomCode) {
+    sendToPlayer(playerId, { type: 'quickMatchError', error: 'Leave your current room before starting Quick Match.' });
+    return;
+  }
+  const existingEntry = quickMatchQueue.find(function (entry) { return entry.playerId === playerId; });
+  if (existingEntry) {
+    if (existingEntry.gameMode !== gameMode) {
+      cancelQuickMatch(playerId, false);
+      return requestQuickMatch(playerId, gameMode);
+    }
+    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
+    return;
+  }
+
+  for (let index = quickMatchQueue.length - 1; index >= 0; index--) {
+    const queuedPlayer = players[quickMatchQueue[index].playerId];
+    if (!queuedPlayer || queuedPlayer.roomCode) {
+      clearTimeout(quickMatchQueue[index].timeout);
+      quickMatchQueue.splice(index, 1);
+    }
+  }
+  const opponentIndex = quickMatchQueue.findIndex(function (entry) { return entry.playerId !== playerId && entry.gameMode === gameMode; });
+  const opponentEntry = opponentIndex === -1 ? null : quickMatchQueue.splice(opponentIndex, 1)[0];
+
+  if (opponentEntry) {
+    clearTimeout(opponentEntry.timeout);
+    startQuickMatchRoom(opponentEntry.playerId, playerId, null, gameMode);
+    return;
+  }
+
+  const entry = { playerId: playerId, gameMode: gameMode, timeout: null };
+  entry.timeout = setTimeout(function () { fallbackQuickMatchToBot(playerId); }, QUICK_MATCH_WAIT_MS);
+  quickMatchQueue.push(entry);
+  sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
+}
+
 function startBattle(room) {
+  if (!room.players.every(function (playerId) { return !!players[playerId]; })) return;
   if (room.gameMode === 'sprint') { startSprint(room); return; }
+  clearBotActionTimers(room);
   room.leaderboardRecorded = false;
   room.timerFrozen = false;
+  room.questionVersion++;
   const p1Id = room.players[0];
   const p2Id = room.players[1];
   const settings = room.settings;
@@ -376,6 +506,7 @@ function nextTurn(room) {
     question = generateQuestion(room.settings.sifir, room.settings.difficulty);
   }
   room.currentQuestion = question;
+  room.questionVersion++;
   room.questionStartTime = Date.now();
 
   // Start timer
@@ -390,6 +521,79 @@ function nextTurn(room) {
     question: { a: question.a, b: question.b, isWeak: question.isWeak },
     timer: room.settings.timer
   });
+  scheduleBotTurn(room);
+}
+
+function clearBotActionTimers(room) {
+  if (!room || !Array.isArray(room.botActionTimers)) return;
+  room.botActionTimers.forEach(clearTimeout);
+  room.botActionTimers = [];
+  if (Array.isArray(room.botSprintTimers)) {
+    room.botSprintTimers.forEach(clearTimeout);
+    room.botSprintTimers = [null, null];
+  }
+}
+
+function finishQuestion(room) {
+  clearBotActionTimers(room);
+  room.currentQuestion = null;
+  room.questionVersion++;
+}
+
+function availableCardIndex(player, cardId) {
+  return player.cards.findIndex(function (card) { return card.id === cardId && !card.used; });
+}
+
+function chooseBotCardIndex(room, playerIdx, bot) {
+  if (Math.random() > bot.cardChance) return -1;
+  const player = room.gameState.players[playerIdx];
+  const opponent = room.gameState.players[1 - playerIdx];
+  let priorities = [];
+  if (bot.level === 'smart') {
+    if (player.hp <= 45) priorities.push('healPotion');
+    if (opponent.hp <= 20 || player.hp <= 35) priorities.push('stealHP');
+    if (player.streak >= 2) priorities.push('doubleStrike', 'streakBoost');
+    if (player.hp <= 55) priorities.push('mirrorShield', 'shield', 'secondChance');
+    priorities.push('doubleStrike', 'streakBoost', 'timeFreeze', 'revealHint', 'skipQuestion');
+  } else if (bot.level === 'medium') {
+    if (player.hp <= 35) priorities.push('healPotion', 'shield');
+    priorities.push('doubleStrike', 'streakBoost', 'secondChance', 'stealHP', 'revealHint');
+  } else {
+    priorities = ['revealHint', 'shield', 'healPotion', 'streakBoost', 'skipQuestion'];
+  }
+  for (const cardId of priorities) {
+    const index = availableCardIndex(player, cardId);
+    if (index !== -1) return index;
+  }
+  return -1;
+}
+
+function scheduleBotTurn(room) {
+  if (!room.battleActive || !room.currentQuestion) return;
+  const botId = room.players[room.currentPlayer];
+  const botPlayer = players[botId];
+  if (!botPlayer || !botPlayer.isBot || !botPlayer.bot) return;
+
+  clearBotActionTimers(room);
+  const version = room.questionVersion;
+  const bot = botPlayer.bot;
+  const responseRatio = botCatalog.randomBetween(bot.responseMin, bot.responseMax);
+  const responseDelay = Math.max(350, Math.round(room.settings.timer * responseRatio * 1000));
+  const cardIdx = chooseBotCardIndex(room, room.currentPlayer, bot);
+
+  if (cardIdx !== -1 && responseDelay > 700) {
+    room.botActionTimers.push(setTimeout(function () {
+      if (!room.battleActive || room.questionVersion !== version || room.currentPlayer !== botPlayer.playerIdx) return;
+      handleCardActivate(room, botId, cardIdx);
+    }, Math.min(500, Math.floor(responseDelay / 3))));
+  }
+
+  room.botActionTimers.push(setTimeout(function () {
+    if (!room.battleActive || room.questionVersion !== version || room.currentPlayer !== botPlayer.playerIdx || !room.currentQuestion) return;
+    const correct = Math.random() < bot.accuracy;
+    const answer = correct ? room.currentQuestion.answer : botCatalog.plausibleWrongAnswer(room.currentQuestion);
+    handleAnswer(room, botId, answer);
+  }, responseDelay));
 }
 
 function startTimer(room) {
@@ -433,7 +637,7 @@ function handleAnswer(room, playerId, answer) {
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
 
-  room.currentQuestion = null;
+  finishQuestion(room);
 
   setTimeout(function () {
     if (checkWin(room)) return;
@@ -531,6 +735,7 @@ function handleTimeout(room) {
       secondChance: true
     });
     broadcast(room, { type: 'stateSync', players: room.gameState.players });
+    finishQuestion(room);
     setTimeout(function () {
       if (checkWin(room)) return;
       nextTurn(room);
@@ -550,6 +755,7 @@ function handleTimeout(room) {
     damage: 8
   });
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
+  finishQuestion(room);
 
   setTimeout(function () {
     if (checkWin(room)) return;
@@ -614,19 +820,23 @@ function handleCardActivate(room, playerId, cardIdx) {
   card.used = true;
   broadcast(room, cardResult);
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
+  if (checkWin(room)) return;
 
   // If skip question, generate new question
   if (card.id === 'skipQuestion') {
+    stopTimer(room);
+    finishQuestion(room);
     setTimeout(function () {
       if (!room.battleActive) return;
       let question;
       if (room.weakQuestions.length > 0 && Math.random() < 0.3) {
         var wq = room.weakQuestions[Math.floor(Math.random() * room.weakQuestions.length)];
-        question = { a: wq.a, b: wq.b, answer: wq.a * wq.b, isWeak: true };
+        question = { a: wq.a, b: wq.b, answer: wq.a * wq.b, isWeak: true, table: wq.table };
       } else {
         question = generateQuestion(room.settings.sifir, room.settings.difficulty);
       }
       room.currentQuestion = question;
+      room.questionVersion++;
       room.questionStartTime = Date.now();
       room.timerFrozen = false;
       startTimer(room);
@@ -635,6 +845,7 @@ function handleCardActivate(room, playerId, cardIdx) {
         question: { a: question.a, b: question.b, isWeak: question.isWeak },
         timer: room.settings.timer
       });
+      scheduleBotTurn(room);
     }, 500);
   }
 }
@@ -642,6 +853,7 @@ function handleCardActivate(room, playerId, cardIdx) {
 /* ==================== SPRINT MODE ==================== */
 function startSprint(room) {
   if (room.sprintInterval) clearInterval(room.sprintInterval);
+  clearBotActionTimers(room);
   room.leaderboardRecorded = false;
   room.timerFrozen = false;
   const sprintDuration = room.settings.sprintTime || SPRINT_DURATION;
@@ -658,6 +870,8 @@ function startSprint(room) {
   room.round = 0;
   room.battleActive = true;
   room.sprintTimeLeft = sprintDuration;
+  room.sprintQuestionVersions = [0, 0];
+  room.botSprintTimers = [null, null];
 
   sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
   sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
@@ -691,6 +905,7 @@ function sendSprintQuestion(room, playerIdx) {
   if (!room.battleActive) return;
   const q = generateQuestion(room.settings.sifir, room.settings.difficulty);
   room.sprintQuestions[playerIdx] = q;
+  room.sprintQuestionVersions[playerIdx]++;
   const playerId = room.players[playerIdx];
   sendToPlayer(playerId, {
     type: 'newTurn',
@@ -700,6 +915,35 @@ function sendSprintQuestion(room, playerIdx) {
     timer: room.settings.timer,
     sprint: true
   });
+  scheduleBotSprintAnswer(room, playerIdx);
+}
+
+function scheduleBotSprintAnswer(room, playerIdx) {
+  const botId = room.players[playerIdx];
+  const botPlayer = players[botId];
+  if (!botPlayer || !botPlayer.isBot || !botPlayer.bot) return;
+  clearTimeout(room.botSprintTimers[playerIdx]);
+  const version = room.sprintQuestionVersions[playerIdx];
+  const bot = botPlayer.bot;
+  let delayRange;
+  if (bot.level === 'smart') delayRange = [800, 1700];
+  else if (bot.level === 'medium') delayRange = [1800, 3200];
+  else delayRange = [3200, 5500];
+  const responseDelay = Math.round(botCatalog.randomBetween(delayRange[0], delayRange[1]));
+  room.botSprintTimers[playerIdx] = setTimeout(function () {
+    if (!room.battleActive || room.sprintQuestionVersions[playerIdx] !== version || !room.sprintQuestions[playerIdx]) return;
+    const question = room.sprintQuestions[playerIdx];
+    const correct = Math.random() < bot.accuracy;
+    const answer = correct ? question.answer : botCatalog.plausibleWrongAnswer(question);
+    handleSprintAnswer(room, botId, answer);
+  }, responseDelay);
+}
+
+function finishSprintQuestion(room, playerIdx) {
+  clearTimeout(room.botSprintTimers[playerIdx]);
+  room.botSprintTimers[playerIdx] = null;
+  room.sprintQuestions[playerIdx] = null;
+  room.sprintQuestionVersions[playerIdx]++;
 }
 
 function handleSprintAnswer(room, playerId, answer) {
@@ -731,6 +975,7 @@ function handleSprintAnswer(room, playerId, answer) {
   });
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
+  finishSprintQuestion(room, playerIdx);
 
   // Immediately send next question
   setTimeout(function () {
@@ -757,6 +1002,7 @@ function handleSprintTimeout(room, playerIdx) {
   });
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
+  finishSprintQuestion(room, playerIdx);
 
   setTimeout(function () {
     if (room.battleActive) sendSprintQuestion(room, playerIdx);
@@ -766,6 +1012,7 @@ function handleSprintTimeout(room, playerIdx) {
 function endSprint(room) {
   room.battleActive = false;
   clearInterval(room.sprintInterval);
+  clearBotActionTimers(room);
 
   const p0 = room.gameState.players[0];
   const p1 = room.gameState.players[1];
@@ -802,6 +1049,9 @@ function checkWin(room) {
     if (room.gameState.players[i].hp <= 0) {
       room.battleActive = false;
       stopTimer(room);
+      clearBotActionTimers(room);
+      room.currentQuestion = null;
+      room.questionVersion++;
       const winnerIdx = 1 - i;
       const winner = room.gameState.players[winnerIdx];
       broadcast(room, {
@@ -824,9 +1074,23 @@ function checkWin(room) {
   return false;
 }
 
+function destroyRoom(roomCode) {
+  const room = rooms[roomCode];
+  if (!room) return;
+  room.battleActive = false;
+  stopTimer(room);
+  clearBotActionTimers(room);
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  room.players.forEach(function (playerId) {
+    if (players[playerId] && players[playerId].isBot) delete players[playerId];
+  });
+  delete rooms[roomCode];
+}
+
 function handleDisconnect(playerId) {
   const player = players[playerId];
   if (!player) return;
+  cancelQuickMatch(playerId, false);
   const roomCode = player.roomCode;
   const room = roomCode ? rooms[roomCode] : null;
   delete players[playerId];
@@ -837,10 +1101,8 @@ function handleDisconnect(playerId) {
   if (idx !== -1) room.players.splice(idx, 1);
 
   // No opponents left (e.g. creator left while waiting) -> delete room immediately
-  if (room.players.length === 0) {
-    if (room.sprintInterval) clearInterval(room.sprintInterval);
-    stopTimer(room);
-    delete rooms[roomCode];
+  if (room.players.length === 0 || room.players.every(function (remainingId) { return players[remainingId] && players[remainingId].isBot; })) {
+    destroyRoom(roomCode);
     return;
   }
 
@@ -850,14 +1112,14 @@ function handleDisconnect(playerId) {
   room.battleActive = false;
   // Remove room after delay
   setTimeout(function () {
-    delete rooms[roomCode];
+    destroyRoom(roomCode);
   }, 5000);
 }
 
 /* ==================== MESSAGING ==================== */
 function sendToPlayer(playerId, message) {
   const player = players[playerId];
-  if (player && player.ws.readyState === WebSocket.OPEN) {
+  if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
     player.ws.send(JSON.stringify(message));
   }
 }
@@ -1165,7 +1427,16 @@ wss.on('connection', async function connection(ws, req) {
         submitSoloLeaderboardResult(playerId, message);
         break;
 
+      case 'quickMatch':
+        requestQuickMatch(playerId, message.gameMode);
+        break;
+
+      case 'cancelQuickMatch':
+        cancelQuickMatch(playerId, true);
+        break;
+
       case 'createRoom': {
+        cancelQuickMatch(playerId, false);
         const settings = normalizeSettings(message.settings);
         const code = createRoom(playerId, settings);
         sendToPlayer(playerId, { type: 'roomCreated', code: code, gameMode: settings.gameMode, settings: settings });
@@ -1173,6 +1444,7 @@ wss.on('connection', async function connection(ws, req) {
       }
 
       case 'joinRoom': {
+        cancelQuickMatch(playerId, false);
         const code = typeof message.code === 'string' ? message.code.trim().toUpperCase() : '';
         const joinResult = joinRoom(playerId, code);
         if (joinResult.error) {
@@ -1207,7 +1479,7 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'startBattle': {
         const room = rooms[players[playerId].roomCode];
-        if (room && room.players.length === 2) {
+        if (room && room.players.length === 2 && !room.battleActive) {
           startBattle(room);
         }
         break;
@@ -1236,7 +1508,7 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
-        if (room && room.players.length === 2) {
+        if (room && room.players.length === 2 && !room.battleActive) {
           startBattle(room);
         }
         break;

@@ -46,6 +46,9 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .connect-btn:disabled{cursor:not-allowed;filter:grayscale(0.7);opacity:0.45;transform:none;box-shadow:none;}
 .btn-create{background:linear-gradient(135deg,var(--neon-cyan),var(--neon-blue));color:#000;box-shadow:var(--glow-cyan);}
 .btn-create:hover{filter:brightness(1.15);transform:translateY(-1px);}
+.btn-quick-match{background:linear-gradient(135deg,var(--neon-yellow),#ff8a00);color:#100b00;box-shadow:var(--glow-yellow);}
+.btn-quick-match:hover{filter:brightness(1.12);transform:translateY(-1px);}
+.quick-match-note{font-size:0.62rem;color:var(--text-dim);margin:6px 0 10px;line-height:1.5;letter-spacing:0.5px;}
 .btn-join{background:linear-gradient(135deg,var(--neon-green),#00cc66);color:#000;box-shadow:var(--glow-green);}
 .btn-join:hover{filter:brightness(1.15);transform:translateY(-1px);}
 .connect-btn:disabled:hover{filter:grayscale(0.7);opacity:0.45;transform:none;box-shadow:none;}
@@ -57,6 +60,15 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .connect-waiting{display:none;text-align:center;}
 .connect-card.waiting>:not(.connect-waiting):not(.mode-back-btn){display:none!important;}
 .connect-card.waiting>.connect-waiting{display:block;}
+.quick-match-waiting{display:none;text-align:center;padding:30px 4px 16px;}
+.connect-card.searching>:not(.quick-match-waiting):not(.mode-back-btn){display:none!important;}
+.connect-card.searching>.quick-match-waiting{display:block;}
+.quick-match-spinner{width:66px;height:66px;margin:8px auto 22px;border:5px solid rgba(255,230,0,0.16);border-top-color:var(--neon-yellow);border-right-color:var(--neon-cyan);border-radius:50%;animation:quickSpin 0.9s linear infinite;box-shadow:0 0 18px rgba(255,230,0,0.25);}
+.quick-match-title{font-size:1rem;color:var(--neon-yellow);text-transform:uppercase;letter-spacing:2px;font-weight:bold;margin-bottom:10px;}
+.quick-match-countdown{font-size:0.78rem;color:var(--text-dim);min-height:42px;line-height:1.6;}
+.quick-match-cancel{margin-top:18px;padding:10px 20px;border:1px solid var(--neon-red);border-radius:7px;background:rgba(255,46,99,0.1);color:var(--neon-red);font-family:inherit;font-weight:bold;text-transform:uppercase;letter-spacing:1px;cursor:pointer;}
+.quick-match-cancel:hover{background:rgba(255,46,99,0.2);box-shadow:var(--glow-red);}
+@keyframes quickSpin{to{transform:rotate(360deg);}}
 .mode-back-btn{position:absolute;top:12px;left:14px;z-index:3;padding:7px 10px;border:1px solid var(--border);border-radius:7px;background:rgba(10,10,15,0.72);color:var(--text-dim);font-family:inherit;font-size:0.58rem;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;cursor:pointer;transition:all 0.2s;}
 .mode-back-btn:hover{border-color:var(--neon-cyan);color:var(--neon-cyan);}
 .copy-room-btn{margin-top:4px;padding:10px 18px;border:1px solid var(--neon-cyan);border-radius:7px;background:rgba(0,240,255,0.08);color:var(--neon-cyan);font-family:inherit;font-weight:bold;letter-spacing:1px;text-transform:uppercase;cursor:pointer;}
@@ -747,6 +759,8 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       </div>
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the global leaderboard.</div>
+    <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
+    <div class="quick-match-note" id="quick-match-note">Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 20s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -762,6 +776,12 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <div class="room-code-display" id="room-code-display"></div>
       <button class="copy-room-btn" id="copy-room-code">Copy Room Code</button>
       <div class="connect-status success" id="room-waiting-status">Waiting for opponent to join...</div>
+    </div>
+    <div class="quick-match-waiting" id="quick-match-waiting">
+      <div class="quick-match-spinner" id="quick-match-spinner"></div>
+      <div class="quick-match-title" id="quick-match-title">Searching for opponent</div>
+      <div class="quick-match-countdown" id="quick-match-countdown">Looking for an available player...</div>
+      <button class="quick-match-cancel" id="btn-cancel-quick-match" type="button">Cancel Search</button>
     </div>
   </div>
 </div>
@@ -926,6 +946,10 @@ var STATE = {
   isSprint: false,
   reconnectTimer: null,
   reconnectAttempts: 0,
+  quickMatchSearching: false,
+  quickMatchStartedAt: 0,
+  quickMatchWaitMs: 8000,
+  quickMatchInterval: null,
   learningStats: {},
   leaderboardMode: 'solo',
   leaderboardRequestId: 0
@@ -2058,6 +2082,12 @@ function applyModeState(mode) {
   updateModeDesc(mode);
   updateWarriorDisplay(mode);
   var isSolo = mode === 'solo';
+  var supportsQuickMatch = mode === 'ffa' || mode === 'sprint';
+  document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
+  document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
+  document.getElementById('quick-match-note').textContent = mode === 'sprint'
+    ? 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 60s Sprint.'
+    : 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 20s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -2107,8 +2137,10 @@ function initModeToggle() {
 function setConnectionControls(connected) {
   var createBtn = document.getElementById('btn-create');
   var joinBtn = document.getElementById('btn-join');
+  var quickBtn = document.getElementById('btn-quick-match');
   if (createBtn) createBtn.disabled = !connected;
   if (joinBtn) joinBtn.disabled = !connected;
+  if (quickBtn) quickBtn.disabled = !connected;
 }
 
 function scheduleReconnect() {
@@ -2169,6 +2201,7 @@ function connectWebSocket() {
 
 function resetRemoteSession() {
   stopTimerDisplay();
+  resetQuickMatchUI();
   STATE.roomCode = null;
   STATE.battleActive = false;
   STATE.isSprint = false;
@@ -2206,6 +2239,50 @@ function applyAuthoritativeRoomState(message) {
   setModeControlsLocked(true);
 }
 
+function stopQuickMatchClock() {
+  clearInterval(STATE.quickMatchInterval);
+  STATE.quickMatchInterval = null;
+}
+
+function beginQuickMatchSearch(waitMs) {
+  stopQuickMatchClock();
+  STATE.quickMatchSearching = true;
+  STATE.quickMatchWaitMs = Number(waitMs) || 8000;
+  STATE.quickMatchStartedAt = Date.now();
+  var card = document.getElementById('connect-card');
+  card.classList.remove('waiting');
+  card.classList.add('searching');
+  document.getElementById('quick-match-title').textContent = 'Searching for opponent';
+  document.getElementById('btn-cancel-quick-match').disabled = false;
+  setModeControlsLocked(true);
+
+  function updateSearchTime() {
+    var remaining = Math.max(0, STATE.quickMatchWaitMs - (Date.now() - STATE.quickMatchStartedAt));
+    document.getElementById('quick-match-countdown').textContent = remaining > 0
+      ? 'Mencari pemain tersedia... ' + Math.ceil(remaining / 1000) + 's'
+      : 'Menyediakan lawan arena...';
+  }
+  updateSearchTime();
+  STATE.quickMatchInterval = setInterval(updateSearchTime, 100);
+}
+
+function showQuickMatchFound(opponentName) {
+  stopQuickMatchClock();
+  STATE.quickMatchSearching = false;
+  document.getElementById('quick-match-title').textContent = 'Opponent found!';
+  document.getElementById('quick-match-countdown').textContent = opponentName + ' bersedia. Pertarungan akan bermula...';
+  document.getElementById('btn-cancel-quick-match').disabled = true;
+}
+
+function resetQuickMatchUI() {
+  stopQuickMatchClock();
+  STATE.quickMatchSearching = false;
+  document.getElementById('connect-card').classList.remove('searching');
+  document.getElementById('quick-match-title').textContent = 'Searching for opponent';
+  document.getElementById('quick-match-countdown').textContent = 'Looking for an available player...';
+  document.getElementById('btn-cancel-quick-match').disabled = false;
+}
+
 /* ==================== MESSAGE HANDLER ==================== */
 function handleMessage(msg) {
   switch (msg.type) {
@@ -2226,13 +2303,46 @@ function handleMessage(msg) {
       break;
 
     case 'roomCreated':
+      resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.roomCode = msg.code;
       document.getElementById('hdr-room').textContent = msg.code;
       showRoomCode(msg.code);
       break;
 
+    case 'quickMatchSearching':
+      applyAuthoritativeRoomState({ gameMode: msg.gameMode, settings: msg.settings });
+      STATE.roomCode = 'QUICK';
+      document.getElementById('hdr-room').textContent = 'Quick';
+      beginQuickMatchSearch(msg.waitMs);
+      break;
+
+    case 'quickMatchFound':
+      applyAuthoritativeRoomState(msg);
+      STATE.you = msg.you;
+      STATE.roomCode = 'QUICK';
+      document.getElementById('hdr-room').textContent = 'Quick';
+      showQuickMatchFound(msg.opponentName);
+      break;
+
+    case 'quickMatchCancelled':
+      STATE.roomCode = null;
+      document.getElementById('hdr-room').textContent = '-';
+      resetQuickMatchUI();
+      setModeControlsLocked(false);
+      setConnectStatus('Quick Match dibatalkan.', 'success');
+      break;
+
+    case 'quickMatchError':
+      STATE.roomCode = null;
+      document.getElementById('hdr-room').textContent = '-';
+      resetQuickMatchUI();
+      setModeControlsLocked(false);
+      setConnectStatus(msg.error || 'Quick Match tidak dapat dimulakan.', 'error');
+      break;
+
     case 'roomJoined':
+      resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.roomCode = msg.code;
       document.getElementById('hdr-room').textContent = msg.code;
@@ -2258,6 +2368,7 @@ function handleMessage(msg) {
       break;
 
     case 'gameStart':
+      resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.you = msg.you;
       STATE.players = msg.players;
@@ -2729,8 +2840,10 @@ function startCountdown(callback) {
 
 /* ==================== GO HOME ==================== */
 function goHome() {
+  if (STATE.quickMatchSearching) send({ type: 'cancelQuickMatch' });
   if (STATE.ws && STATE.ws.readyState === WebSocket.OPEN) STATE.ws.close();
   stopTimerDisplay();
+  resetQuickMatchUI();
   STATE.roomCode = null;
   STATE.battleActive = false;
   STATE.isSprint = false;
@@ -3099,6 +3212,24 @@ function initEventListeners() {
 
   document.getElementById('mode-back-btn').addEventListener('click', function () {
     goHome();
+  });
+
+  document.getElementById('btn-quick-match').addEventListener('click', function () {
+    Sound.init(); Sound.click();
+    STATE.you = 0;
+    var quickMode = STATE.gameMode === 'sprint' ? 'sprint' : 'ffa';
+    STATE.settings = quickMode === 'sprint'
+      ? { timer: 60, sprintTime: 60, sifir: 0, difficulty: 'random', gameMode: 'sprint' }
+      : { timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: 60 };
+    if (!send({ type: 'setName' })) return;
+    send({ type: 'quickMatch', gameMode: quickMode });
+  });
+
+  document.getElementById('btn-cancel-quick-match').addEventListener('click', function () {
+    Sound.click();
+    document.getElementById('quick-match-title').textContent = 'Cancelling search...';
+    document.getElementById('btn-cancel-quick-match').disabled = true;
+    send({ type: 'cancelQuickMatch' });
   });
 
   // Create room

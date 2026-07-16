@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const { newDb } = require('pg-mem');
+const botCatalog = require('./bot-catalog');
 
 async function run() {
   process.env.DATABASE_URL = 'postgresql://leaderboard-test';
@@ -47,6 +48,10 @@ async function run() {
   assert.strictEqual(store.normalizeEmail('teacher@example.com'), 'teacher@example.com');
   assert.strictEqual(store.normalizeEmail('not-an-email'), null);
   assert.strictEqual(store.normalizePlayerName('bad name'), null);
+  await assert.rejects(
+    store.registerAccount({ email: 'reserved.bot@example.com', password: 'secure-pass-123', playerName: botCatalog.BOT_PROFILES[0].name }),
+    function (error) { return error.code === 'PLAYER_NAME_TAKEN'; }
+  );
 
   const playerA = { profileId: 'device_player_a', name: 'Same Name' };
   const playerB = { profileId: 'device_player_b', name: 'Same Name' };
@@ -70,6 +75,8 @@ async function run() {
   rows = await store.getLeaderboard('sprint', 10);
   assert.strictEqual(rows[0].correct, 11);
   assert.strictEqual(rows[1].accuracy, 91);
+  const sprintRows = await store.getLeaderboard('sprint', 50);
+  assert.ok(botCatalog.BOT_PROFILES.every(function (bot) { return sprintRows.some(function (row) { return row.name === bot.name; }); }));
 
   await store.recordMultiplayerGame([
     { profileId: playerA.profileId, name: playerA.name, winner: true },
@@ -80,13 +87,30 @@ async function run() {
     { profileId: playerB.profileId, name: playerB.name, winner: true }
   ]);
   rows = await store.getLeaderboard('multiplayer', 10);
-  assert.strictEqual(rows.length, 2);
-  assert.ok(rows.every(function (row) { return row.wins === 1 && row.gamesPlayed === 2 && row.winRate === 50; }));
+  const humanRows = rows.filter(function (row) { return row.name === 'Renamed Player' || row.name === playerB.name; });
+  assert.strictEqual(humanRows.length, 2);
+  assert.ok(humanRows.every(function (row) { return row.wins === 1 && row.gamesPlayed === 2 && row.winRate === 50; }));
+
+  const botProfile = botCatalog.BOT_PROFILES[0];
+  await store.recordMultiplayerGame([
+    { profileId: playerA.profileId, name: 'Renamed Player', winner: false },
+    { profileId: botProfile.profileId, name: botProfile.name, winner: true }
+  ]);
+  rows = await store.getLeaderboard('multiplayer', 50);
+  const botRow = rows.find(function (row) { return row.name === botProfile.name; });
+  assert.ok(botRow);
+  assert.strictEqual(botRow.wins, 1);
+  assert.strictEqual(botRow.gamesPlayed, 1);
+  const updatedPlayerA = rows.find(function (row) { return row.name === 'Renamed Player'; });
+  assert.strictEqual(updatedPlayerA.wins, 1);
+  assert.strictEqual(updatedPlayerA.gamesPlayed, 3);
+  assert.ok(botCatalog.BOT_PROFILES.every(function (bot) { return rows.some(function (row) { return row.name === bot.name; }); }));
 
   await store.recordBest({ profileId: playerA.profileId, name: 'Renamed Player' }, 'solo', { score: 100, correct: 10, wrong: 0, accuracy: 100 });
   rows = await store.getLeaderboard('solo', 10);
   assert.strictEqual(rows[0].name, 'Renamed Player');
   assert.strictEqual(rows[0].score, 110);
+  assert.ok(rows.every(function (row) { return !botCatalog.isReservedBotName(row.name); }));
 
   delete require.cache[storePath];
   store = require('./leaderboard-store');
