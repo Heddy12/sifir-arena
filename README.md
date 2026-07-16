@@ -8,20 +8,21 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 |------|-------------|
 | `server.js` | WebSocket server (Node.js) — room management, game logic, state sync |
 | `client.html` | Game client (self-contained) — connect screen, Solo Quest, Sprint & multiplayer battle arena, real-time sync |
-| `leaderboard-store.js` | Persistent PostgreSQL leaderboard storage |
+| `leaderboard-store.js` | PostgreSQL account, session and persistent leaderboard storage |
+| `server-auth.test.js` | Authentication, WebSocket access and Create Room regression tests |
 | `package.json` | Node.js dependencies and scripts |
 
 ## Quick Start (Local Testing)
 
 ### Prerequisites
-- Node.js 14+ installed
+- Node.js 18+ installed
 
 ### Run Locally
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Optional: enable the global leaderboard
+# 2. Required: enable player accounts and the global leaderboard
 # PowerShell: $env:DATABASE_URL='postgresql://...'
 # macOS/Linux: export DATABASE_URL='postgresql://...'
 
@@ -60,21 +61,21 @@ git push -u origin main
 8. You'll get a URL like: `https://sifir-arena.onrender.com`
 
 ### Step 3: Play!
-1. Both laptops open the Render URL in browser
-2. Laptop 1: Enter name → **Create Room** → share room code
-3. Laptop 2: Enter name → type room code → **Join Room**
+1. Both players register with Gmail/password and choose a unique Player ID
+2. Laptop 1: Login → **Multiplayer** → **Create Room** → share room code
+3. Laptop 2: Login → **Multiplayer** → type room code → **Join Room**
 4. Battle starts automatically!
 
 ## How to Play
 
 ### Create Room
-1. Enter your name
+1. Register or login; your unique Player ID becomes your in-game name
 2. Select timer (4s/6s/8s/10s), sifir (1-12 or All), difficulty
 3. Click **Create Room**
 4. Share the 6-character room code with opponent
 
 ### Join Room
-1. Enter your name
+1. Register or login; your Player ID is loaded automatically
 2. Type the room code
 3. Click **Join Room**
 4. Battle starts automatically when both players connected
@@ -106,6 +107,9 @@ git push -u origin main
 ## Server Architecture
 
 - **Server-authoritative:** Server controls all game logic (questions, timer, damage, HP)
+- **Account required:** Gameplay WebSockets only accept authenticated sessions
+- **Secure passwords:** Passwords are stored as salted scrypt hashes, never as plain text
+- **Secure sessions:** Random server-side sessions use `HttpOnly`, `SameSite=Strict` cookies (`Secure` on HTTPS)
 - **Room-based:** 6-char room code, max 2 players per room
 - **WebSocket:** Real-time bidirectional communication
 - **Auto-cleanup:** Rooms deleted after disconnect + 5s delay
@@ -118,7 +122,7 @@ git push -u origin main
 - Ranked preset: All Tables and Random difficulty, with a 20s timer for Single Player/Multiplayer and one unified 60s timer for Sprint
 - Custom settings remain playable but are marked **Unranked**
 - Single Player stores the best winning score, Sprint stores the best individual result, and Multiplayer counts wins and games played
-- If PostgreSQL is unavailable, normal gameplay and room creation continue to work
+- PostgreSQL is required for account login and gameplay; a temporary database outage blocks new game sessions safely
 
 ## Troubleshooting
 
@@ -139,7 +143,7 @@ git push -u origin main
 - **Server:** Node.js + ws (WebSocket library)
 - **Client:** Vanilla HTML/CSS/JS (no frameworks)
 - **Audio:** Web Audio API (no external files)
-- **Storage:** PostgreSQL for leaderboard data; active rooms remain server-authoritative in memory
+- **Storage:** PostgreSQL for accounts, sessions and leaderboard data; active rooms remain server-authoritative in memory
 
 ## License
 MIT

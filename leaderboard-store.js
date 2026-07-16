@@ -1,12 +1,18 @@
 'use strict';
 
 const { Pool } = require('pg');
+const crypto = require('crypto');
+const { promisify } = require('util');
+
+const scryptAsync = promisify(crypto.scrypt);
 
 const MODES = ['solo', 'multiplayer', 'sprint'];
 const connectionString = process.env.DATABASE_URL || '';
 let pool = null;
 let schemaReady = false;
 let lastError = null;
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 function unavailableError(message) {
   const error = new Error(message || 'Leaderboard database is unavailable');
@@ -23,6 +29,44 @@ function normalizeProfileId(value) {
 function normalizeName(value) {
   const name = typeof value === 'string' ? value.trim().slice(0, 20) : '';
   return name || 'Player';
+}
+
+function normalizeEmail(value) {
+  const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/.test(email) && email.length <= 254 ? email : null;
+}
+
+function normalizePlayerName(value) {
+  const name = typeof value === 'string' ? value.trim() : '';
+  return /^[A-Za-z0-9_]{3,20}$/.test(name) ? name : null;
+}
+
+function normalizePassword(value) {
+  return typeof value === 'string' && value.length >= 8 && value.length <= 128 ? value : null;
+}
+
+function publicAccount(row) {
+  if (!row) return null;
+  return {
+    accountId: row.account_id,
+    email: row.email,
+    playerName: row.player_name
+  };
+}
+
+function authError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+async function hashPassword(password, salt) {
+  const derived = await scryptAsync(password, Buffer.from(salt, 'hex'), 64, SCRYPT_OPTIONS);
+  return Buffer.from(derived).toString('hex');
+}
+
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 function getPool() {
@@ -71,6 +115,27 @@ async function ensureSchema() {
       );
 
       CREATE INDEX IF NOT EXISTS leaderboard_stats_mode_idx ON leaderboard_stats(mode);
+
+      CREATE TABLE IF NOT EXISTS player_accounts (
+        account_id VARCHAR(80) PRIMARY KEY,
+        email VARCHAR(254) NOT NULL UNIQUE,
+        player_name VARCHAR(20) NOT NULL,
+        player_name_key VARCHAR(20) NOT NULL UNIQUE,
+        password_salt VARCHAR(64) NOT NULL,
+        password_hash VARCHAR(128) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        token_hash VARCHAR(64) PRIMARY KEY,
+        account_id VARCHAR(80) NOT NULL REFERENCES player_accounts(account_id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS auth_sessions_account_idx ON auth_sessions(account_id);
+      CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
     `);
     schemaReady = true;
     lastError = null;
@@ -80,6 +145,121 @@ async function ensureSchema() {
     schemaReady = false;
     throw unavailableError(error.message);
   }
+}
+
+async function createSession(client, accountId) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  await client.query(
+    'INSERT INTO auth_sessions (token_hash, account_id, expires_at) VALUES ($1, $2, $3)',
+    [hashSessionToken(token), accountId, expiresAt]
+  );
+  return token;
+}
+
+async function registerAccount(input) {
+  const email = normalizeEmail(input && input.email);
+  const playerName = normalizePlayerName(input && input.playerName);
+  const password = normalizePassword(input && input.password);
+  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat Gmail yang sah.');
+  if (!playerName) throw authError('INVALID_PLAYER_NAME', 'Player ID mesti 3-20 aksara: huruf, nombor atau _.');
+  if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
+
+  await ensureSchema();
+  const salt = crypto.randomBytes(16).toString('hex');
+  const passwordHash = await hashPassword(password, salt);
+  const accountId = 'acct_' + crypto.randomBytes(24).toString('hex');
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query(
+      `SELECT email, player_name_key FROM player_accounts
+       WHERE email = $1 OR player_name_key = $2`,
+      [email, playerName.toLowerCase()]
+    );
+    if (existing.rows.some(function (row) { return row.email === email; })) {
+      throw authError('EMAIL_TAKEN', 'Alamat Gmail itu sudah didaftarkan.');
+    }
+    if (existing.rows.some(function (row) { return row.player_name_key === playerName.toLowerCase(); })) {
+      throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
+    }
+    const result = await client.query(
+      `INSERT INTO player_accounts
+        (account_id, email, player_name, player_name_key, password_salt, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING account_id, email, player_name`,
+      [accountId, email, playerName, playerName.toLowerCase(), salt, passwordHash]
+    );
+    const token = await createSession(client, accountId);
+    await client.query('COMMIT');
+    return { account: publicAccount(result.rows[0]), token: token };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    if (error.code === '23505') {
+      const detail = String(error.constraint || error.detail || '').toLowerCase();
+      if (detail.includes('player_name')) throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
+      throw authError('EMAIL_TAKEN', 'Alamat Gmail itu sudah didaftarkan.');
+    }
+    if (error.code && (error.code.startsWith('INVALID_') || error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN')) throw error;
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function loginAccount(input) {
+  const email = normalizeEmail(input && input.email);
+  const password = normalizePassword(input && input.password);
+  if (!email || !password) throw authError('INVALID_CREDENTIALS', 'Gmail atau kata laluan tidak betul.');
+
+  await ensureSchema();
+  const result = await getPool().query(
+    `SELECT account_id, email, player_name, password_salt, password_hash
+     FROM player_accounts WHERE email = $1`,
+    [email]
+  );
+  const row = result.rows[0];
+  const salt = row ? row.password_salt : '00000000000000000000000000000000';
+  const expected = row ? row.password_hash : '0'.repeat(128);
+  const actual = await hashPassword(password, salt);
+  const matches = crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
+  if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Gmail atau kata laluan tidak betul.');
+
+  const db = getPool();
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+    const token = await createSession(client, row.account_id);
+    await client.query('COMMIT');
+    return { account: publicAccount(row), token: token };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function getAccountBySession(token) {
+  if (typeof token !== 'string' || token.length < 32 || token.length > 200) return null;
+  await ensureSchema();
+  const result = await getPool().query(
+    `SELECT a.account_id, a.email, a.player_name
+     FROM auth_sessions s
+     JOIN player_accounts a ON a.account_id = s.account_id
+     WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
+    [hashSessionToken(token)]
+  );
+  return publicAccount(result.rows[0]);
+}
+
+async function logoutSession(token) {
+  if (typeof token !== 'string' || token.length < 32 || token.length > 200) return false;
+  await ensureSchema();
+  await getPool().query('DELETE FROM auth_sessions WHERE token_hash = $1', [hashSessionToken(token)]);
+  return true;
 }
 
 async function initialize() {
@@ -241,5 +421,11 @@ module.exports = {
   recordMultiplayerGame,
   normalizeProfileId,
   normalizeName,
+  normalizeEmail,
+  normalizePlayerName,
+  registerAccount,
+  loginAccount,
+  getAccountBySession,
+  logoutSession,
   status
 };

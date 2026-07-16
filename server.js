@@ -19,6 +19,12 @@ const WebSocket = require('ws');
 const leaderboard = require('./leaderboard-store');
 
 const PORT = process.env.PORT || 3000;
+const SESSION_COOKIE = 'sifir_session';
+const SECURE_SESSION_COOKIE = '__Host-sifir_session';
+const AUTH_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_MAX_ATTEMPTS = 10;
+const AUTH_IP_MAX_ATTEMPTS = 100;
+const authAttempts = new Map();
 
 /* ==================== CONSTANTS ==================== */
 const SPRINT_DURATION = 60;
@@ -898,6 +904,152 @@ function sendJson(res, statusCode, body) {
   res.end(JSON.stringify(body));
 }
 
+function parseCookies(req) {
+  const cookies = {};
+  String(req.headers.cookie || '').split(';').forEach(function (part) {
+    const separator = part.indexOf('=');
+    if (separator < 1) return;
+    const name = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    try { cookies[name] = decodeURIComponent(value); } catch (error) {}
+  });
+  return cookies;
+}
+
+function sessionToken(req) {
+  const cookies = parseCookies(req);
+  return cookies[SECURE_SESSION_COOKIE] || cookies[SESSION_COOKIE] || '';
+}
+
+function isSecureRequest(req) {
+  return process.env.NODE_ENV === 'production' || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+}
+
+function sessionCookie(req, token) {
+  const secure = isSecureRequest(req);
+  const name = secure ? SECURE_SESSION_COOKIE : SESSION_COOKIE;
+  return name + '=' + encodeURIComponent(token) + '; Path=/; HttpOnly; SameSite=Strict' + (secure ? '; Secure' : '');
+}
+
+function clearSessionCookies(req) {
+  const expires = '=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0';
+  return [SESSION_COOKIE + expires, SECURE_SESSION_COOKIE + expires + '; Secure'];
+}
+
+function clientIp(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+}
+
+function consumeAttemptKey(key, limit, now) {
+  const current = authAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    authAttempts.set(key, { count: 1, resetAt: now + AUTH_WINDOW_MS });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count++;
+  return true;
+}
+
+function consumeAuthAttempt(req, identity) {
+  const now = Date.now();
+  if (authAttempts.size > 5000) {
+    authAttempts.forEach(function (entry, key) {
+      if (entry.resetAt <= now) authAttempts.delete(key);
+    });
+  }
+  const ip = clientIp(req);
+  const normalizedIdentity = typeof identity === 'string' ? identity.trim().toLowerCase().slice(0, 254) : '';
+  if (!consumeAttemptKey('ip:' + ip, AUTH_IP_MAX_ATTEMPTS, now)) return false;
+  return consumeAttemptKey('login:' + ip + ':' + normalizedIdentity, AUTH_MAX_ATTEMPTS, now);
+}
+
+function requestHasValidOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return parsed.host === req.headers.host && (parsed.protocol === 'https:' || parsed.protocol === 'http:');
+  } catch (error) {
+    return false;
+  }
+}
+
+function readJsonBody(req, limit) {
+  return new Promise(function (resolve, reject) {
+    let body = '';
+    let finished = false;
+    req.setEncoding('utf8');
+    req.on('data', function (chunk) {
+      if (finished) return;
+      body += chunk;
+      if (Buffer.byteLength(body, 'utf8') > limit) {
+        finished = true;
+        reject(Object.assign(new Error('Request body is too large'), { code: 'BODY_TOO_LARGE' }));
+      }
+    });
+    req.on('end', function () {
+      if (finished) return;
+      try {
+        const value = body ? JSON.parse(body) : {};
+        resolve(value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+      } catch (error) {
+        reject(Object.assign(new Error('Invalid JSON'), { code: 'INVALID_JSON' }));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function authErrorStatus(error) {
+  if (error.code === 'INVALID_CREDENTIALS') return 401;
+  if (error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN') return 409;
+  if (error.code === 'LEADERBOARD_UNAVAILABLE') return 503;
+  if (String(error.code || '').startsWith('INVALID_') || error.code === 'BODY_TOO_LARGE') return 400;
+  return 500;
+}
+
+async function handleAuthRequest(req, res, urlPath) {
+  if (urlPath === '/api/me') {
+    if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
+    try {
+      const account = await leaderboard.getAccountBySession(sessionToken(req));
+      if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+      sendJson(res, 200, { account: account });
+    } catch (error) {
+      sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 500, { error: 'Sistem akaun tidak tersedia buat sementara.' });
+    }
+    return;
+  }
+
+  if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
+  if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
+
+  if (urlPath === '/api/logout') {
+    try { await leaderboard.logoutSession(sessionToken(req)); } catch (error) {}
+    res.setHeader('Set-Cookie', clearSessionCookies(req));
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  try {
+    const body = await readJsonBody(req, 10 * 1024);
+    if (!consumeAuthAttempt(req, body.email)) {
+      res.setHeader('Retry-After', String(Math.ceil(AUTH_WINDOW_MS / 1000)));
+      sendJson(res, 429, { error: 'Terlalu banyak cubaan. Cuba lagi dalam 15 minit.' });
+      return;
+    }
+    const result = urlPath === '/api/register'
+      ? await leaderboard.registerAccount(body)
+      : await leaderboard.loginAccount(body);
+    res.setHeader('Set-Cookie', sessionCookie(req, result.token));
+    sendJson(res, urlPath === '/api/register' ? 201 : 200, { account: result.account });
+  } catch (error) {
+    const status = authErrorStatus(error);
+    sendJson(res, status, { error: status === 500 ? 'Tidak dapat memproses permintaan.' : error.message });
+  }
+}
+
 async function handleLeaderboardRequest(req, res) {
   if (req.method !== 'GET') {
     sendJson(res, 405, { error: 'Method not allowed' });
@@ -955,6 +1107,10 @@ const server = http.createServer(function (req, res) {
     handleLeaderboardRequest(req, res);
     return;
   }
+  if (['/api/register', '/api/login', '/api/logout', '/api/me'].includes(urlPath)) {
+    handleAuthRequest(req, res, urlPath);
+    return;
+  }
   const resolved = path.resolve(__dirname, '.' + (urlPath.startsWith('/') ? urlPath : '/' + urlPath));
   if (!resolved.startsWith(__dirname + path.sep)) {
     res.writeHead(403); res.end('Forbidden'); return;
@@ -965,11 +1121,29 @@ const server = http.createServer(function (req, res) {
 /* ==================== WEBSOCKET SERVER ==================== */
 const wss = new WebSocket.Server({ server: server });
 
-wss.on('connection', function connection(ws) {
+wss.on('connection', async function connection(ws, req) {
+  let account;
+  try {
+    account = await leaderboard.getAccountBySession(sessionToken(req));
+  } catch (error) {
+    ws.close(1013, 'Account service unavailable');
+    return;
+  }
+  if (!account) {
+    ws.close(4001, 'Login required');
+    return;
+  }
   const playerId = generatePlayerId();
-  players[playerId] = { ws: ws, name: '', profileId: null, roomCode: null, playerIdx: 0 };
+  players[playerId] = {
+    ws: ws,
+    name: account.playerName,
+    profileId: account.accountId,
+    accountId: account.accountId,
+    roomCode: null,
+    playerIdx: 0
+  };
 
-  sendToPlayer(playerId, { type: 'connected', playerId: playerId });
+  sendToPlayer(playerId, { type: 'connected', playerId: playerId, playerName: account.playerName });
 
   ws.on('message', function incoming(rawMessage) {
     if (!players[playerId]) return;
@@ -982,10 +1156,8 @@ wss.on('connection', function connection(ws) {
 
     switch (message.type) {
       case 'setName': {
-        let nm = (typeof message.name === 'string') ? message.name.trim() : '';
-        if (nm.length > 20) nm = nm.slice(0, 20);
-        players[playerId].name = nm || 'Player';
-        players[playerId].profileId = leaderboard.normalizeProfileId(message.profileId);
+        players[playerId].name = account.playerName;
+        players[playerId].profileId = account.accountId;
         break;
       }
 
@@ -1093,6 +1265,10 @@ function generatePlayerId() {
   return 'p_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
 
-server.listen(PORT, function () {
-  console.log('ASMD Times Table Hero Arena server running on port ' + PORT);
-});
+if (require.main === module) {
+  server.listen(PORT, function () {
+    console.log('ASMD Times Table Hero Arena server running on port ' + PORT);
+  });
+}
+
+module.exports = { server: server, wss: wss };

@@ -18,6 +18,35 @@ async function run() {
   let store = require('./leaderboard-store');
   assert.strictEqual(await store.initialize(), true);
 
+  const registered = await store.registerAccount({
+    email: 'Hero.Test@gmail.com',
+    password: 'secure-pass-123',
+    playerName: 'Hero_Test'
+  });
+  assert.strictEqual(registered.account.email, 'hero.test@gmail.com');
+  assert.strictEqual(registered.account.playerName, 'Hero_Test');
+  assert.ok(registered.token.length >= 32);
+  assert.deepStrictEqual(await store.getAccountBySession(registered.token), registered.account);
+
+  const loggedIn = await store.loginAccount({ email: 'hero.test@gmail.com', password: 'secure-pass-123' });
+  assert.strictEqual(loggedIn.account.accountId, registered.account.accountId);
+  await assert.rejects(
+    store.loginAccount({ email: 'hero.test@gmail.com', password: 'wrong-password' }),
+    function (error) { return error.code === 'INVALID_CREDENTIALS'; }
+  );
+  await assert.rejects(
+    store.registerAccount({ email: 'hero.test@gmail.com', password: 'another-pass-123', playerName: 'DifferentHero' }),
+    function (error) { return error.code === 'EMAIL_TAKEN'; }
+  );
+  await assert.rejects(
+    store.registerAccount({ email: 'another.hero@gmail.com', password: 'another-pass-123', playerName: 'hero_test' }),
+    function (error) { return error.code === 'PLAYER_NAME_TAKEN'; }
+  );
+  assert.strictEqual(await store.logoutSession(loggedIn.token), true);
+  assert.strictEqual(await store.getAccountBySession(loggedIn.token), null);
+  assert.strictEqual(store.normalizeEmail('not-gmail@example.com'), null);
+  assert.strictEqual(store.normalizePlayerName('bad name'), null);
+
   const playerA = { profileId: 'device_player_a', name: 'Same Name' };
   const playerB = { profileId: 'device_player_b', name: 'Same Name' };
 

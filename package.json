@@ -6,14 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node leaderboard-store.test.js"
+    "test": "node leaderboard-store.test.js && node server-auth.test.js"
   },
   "dependencies": {
     "pg": "^8.22.0",
     "ws": "^8.16.0"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "education",
