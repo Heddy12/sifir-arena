@@ -128,11 +128,11 @@ function run() {
 
   Sound.haltMusic();
   assert.deepStrictEqual(
-    JSON.parse(JSON.stringify(loaded.rankProgressState({ provisional: true, placementGames: 3, rp: 600 }))),
-    { percent: 60, detail: 'Placement 3/5' }
+    JSON.parse(JSON.stringify(loaded.rankProgressState({ tier: 'Multiply Warrior', rp: 650 }))),
+    { percent: 50, detail: '50 RP to next' }
   );
   assert.deepStrictEqual(
-    JSON.parse(JSON.stringify(loaded.rankProgressState({ provisional: false, tier: 'Math Legend', rp: 1675 }))),
+    JSON.parse(JSON.stringify(loaded.rankProgressState({ tier: 'Math Legend', rp: 1675 }))),
     { percent: 75, detail: '25 RP to next' }
   );
   assert.ok(loaded.html.includes('id="home-rank-grid"'), 'home should include season rank cards');
@@ -146,6 +146,7 @@ function run() {
   assert.ok(loaded.rankGuide[7].range.includes('2100+ RP'));
   assert.ok(loaded.rankGuide[7].range.includes('Top 50'));
   assert.ok(loaded.html.includes('Demotion Shield'), 'rank guide should explain demotion protection');
+  assert.strictEqual(loaded.html.includes('Placement Rank'), false, 'rank should be visible immediately without placement');
   console.log('client audio tests passed');
 }
 

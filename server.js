@@ -32,7 +32,7 @@ const soloSessions = new Map();
 /* ==================== CONSTANTS ==================== */
 const SPRINT_DURATION = 60;
 const TURN_DELAY = 1500;
-const FIRST_TURN_DELAY = 2000;
+const COUNTDOWN_READY_FALLBACK_MS = 15000;
 const BASE_HP = 100;
 const BASE_DAMAGE = 10;
 const WRONG_DAMAGE = 5;
@@ -374,6 +374,9 @@ function createRoom(playerId, settings) {
     leaderboardRecorded: false,
     questionVersion: 0,
     botActionTimers: [],
+    countdownPending: false,
+    countdownFallback: null,
+    readyPlayers: {},
     matchType: 'room',
     botProfileId: null
   };
@@ -530,12 +533,49 @@ async function requestQuickMatch(playerId, requestedMode) {
   sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
 }
 
+function prepareBattleCountdown(room) {
+  clearTimeout(room.countdownFallback);
+  room.countdownPending = true;
+  room.readyPlayers = {};
+  room.players.forEach(function (playerId) {
+    if (players[playerId] && players[playerId].isBot) room.readyPlayers[playerId] = true;
+  });
+  room.countdownFallback = setTimeout(function () { beginBattleAfterCountdown(room); }, COUNTDOWN_READY_FALLBACK_MS);
+}
+
+function beginBattleAfterCountdown(room) {
+  if (!room || !room.countdownPending || rooms[room.code] !== room) return;
+  clearTimeout(room.countdownFallback);
+  room.countdownFallback = null;
+  room.countdownPending = false;
+  room.battleActive = true;
+  room.startedAt = Date.now();
+  if (room.gameMode === 'sprint') {
+    const duration = room.settings.sprintTime || SPRINT_DURATION;
+    room.sprintTimeLeft = duration;
+    startSprintClock(room, duration);
+    sendSprintQuestion(room, 0);
+    sendSprintQuestion(room, 1);
+  } else {
+    nextTurn(room);
+  }
+}
+
+function handleBattleReady(room, playerId) {
+  if (!room || !room.countdownPending || !room.players.includes(playerId)) return;
+  room.readyPlayers[playerId] = true;
+  const everyoneReady = room.players.every(function (id) {
+    return room.readyPlayers[id] || (players[id] && players[id].isBot);
+  });
+  if (everyoneReady) beginBattleAfterCountdown(room);
+}
+
 function startBattle(room) {
   if (!room.players.every(function (playerId) { return !!players[playerId]; })) return;
   if (room.gameMode === 'sprint') { startSprint(room); return; }
   clearBotActionTimers(room);
   room.matchId = 'match_' + cryptoRandomId();
-  room.startedAt = Date.now();
+  room.startedAt = null;
   room.leaderboardRecorded = false;
   room.forcedWinnerIdx = null;
   room.paused = false;
@@ -558,7 +598,8 @@ function startBattle(room) {
   room.currentPlayer = 0;
   room.round = 0;
   room.weakQuestions = [];
-  room.battleActive = true;
+  room.battleActive = false;
+  prepareBattleCountdown(room);
 
   // Send initial game state to both players
   sendToPlayer(p1Id, {
@@ -579,8 +620,6 @@ function startBattle(room) {
     yourCards: p2Cards
   });
 
-  // Start first round after a delay
-  setTimeout(function () { nextTurn(room); }, FIRST_TURN_DELAY);
 }
 
 function nextTurn(room) {
@@ -949,7 +988,7 @@ function startSprint(room) {
   if (room.sprintInterval) clearInterval(room.sprintInterval);
   clearBotActionTimers(room);
   room.matchId = 'match_' + cryptoRandomId();
-  room.startedAt = Date.now();
+  room.startedAt = null;
   room.leaderboardRecorded = false;
   room.forcedWinnerIdx = null;
   room.paused = false;
@@ -966,37 +1005,14 @@ function startSprint(room) {
   };
 
   room.round = 0;
-  room.battleActive = true;
+  room.battleActive = false;
+  prepareBattleCountdown(room);
   room.sprintTimeLeft = sprintDuration;
   room.sprintQuestionVersions = [0, 0];
   room.botSprintTimers = [null, null];
 
   sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
   sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
-
-  // Generate first question for each player
-  room.sprintQuestions[0] = generateQuestion(room.settings.sifir, room.settings.difficulty);
-  room.sprintQuestions[1] = generateQuestion(room.settings.sifir, room.settings.difficulty);
-
-  // Start sprint match timer (60s)
-  const sprintStart = Date.now();
-  room.sprintInterval = setInterval(function () {
-    room.sprintTimeLeft = sprintDuration - Math.floor((Date.now() - sprintStart) / 1000);
-    if (room.sprintTimeLeft <= 0) {
-      room.sprintTimeLeft = 0;
-      clearInterval(room.sprintInterval);
-      endSprint(room);
-      return;
-    }
-    broadcast(room, { type: 'sprintTick', timeLeft: room.sprintTimeLeft });
-  }, 1000);
-
-  // Send first questions after a short delay
-  setTimeout(function () {
-    if (!room.battleActive) return;
-    sendSprintQuestion(room, 0);
-    sendSprintQuestion(room, 1);
-  }, 1000);
 }
 
 function sendSprintQuestion(room, playerIdx) {
@@ -1177,6 +1193,7 @@ function destroyRoom(roomCode) {
   const room = rooms[roomCode];
   if (!room) return;
   room.battleActive = false;
+  clearTimeout(room.countdownFallback);
   stopTimer(room);
   clearBotActionTimers(room);
   if (room.sprintInterval) clearInterval(room.sprintInterval);
@@ -1777,9 +1794,15 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'startBattle': {
         const room = rooms[players[playerId].roomCode];
-        if (room && room.players.length === 2 && !room.battleActive) {
+        if (room && room.players.length === 2 && !room.battleActive && !room.countdownPending) {
           startBattle(room);
         }
+        break;
+      }
+
+      case 'battleReady': {
+        const room = rooms[players[playerId].roomCode];
+        if (room) handleBattleReady(room, playerId);
         break;
       }
 
@@ -1806,7 +1829,7 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
-        if (room && room.players.length === 2 && !room.battleActive) {
+        if (room && room.players.length === 2 && !room.battleActive && !room.countdownPending) {
           startBattle(room);
         }
         break;

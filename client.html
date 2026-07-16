@@ -971,7 +971,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <div class="rank-guide-header"><div class="rank-guide-title" id="rank-guide-title">Rank Guide</div><div class="rank-guide-subtitle">Learn what each season rank means and how to reach the next level.</div></div>
       <div class="rank-guide-grid" id="rank-guide-grid"></div>
       <div class="rank-guide-rules">
-        <div class="rank-guide-rule"><strong>Placement:</strong> Complete 5 ranked matches in each mode to reveal your rank.</div>
+        <div class="rank-guide-rule"><strong>Instant Rank:</strong> Your visible rank always follows your current RP. No placement matches are required.</div>
         <div class="rank-guide-rule"><strong>Divisions:</strong> The first 6 ranks progress from Division III to II, then I.</div>
         <div class="rank-guide-rule"><strong>Separate Ranks:</strong> Solo, Multiplayer and Sprint each have their own RP.</div>
         <div class="rank-guide-rule"><strong>Demotion Shield:</strong> Protects you once from dropping below an earned tier.</div>
@@ -1286,11 +1286,7 @@ function renderRankGuide() {
 }
 
 function rankProgressState(rank) {
-  var games = Math.max(0, Number(rank && rank.placementGames) || 0);
   var rp = Math.max(0, Number(rank && rank.rp) || 0);
-  if (rank && rank.provisional) {
-    return { percent: Math.min(100, games * 20), detail: 'Placement ' + games + '/5' };
-  }
   if (rank && rank.tier === 'Times Immortal') return { percent: 100, detail: rank.position ? 'World #' + rank.position : 'Top Rank' };
   var floor;
   var next;
@@ -1307,9 +1303,9 @@ function renderHomeRanks(profile) {
   seasonLabel.textContent = profile.season ? 'Season ' + profile.season.number + (daysLeft === null ? '' : ' · ' + daysLeft + ' days left') : 'Current Season';
   grid.textContent = '';
   HOME_RANK_MODES.forEach(function (mode) {
-    var rank = profile.ranks && profile.ranks[mode.key] ? profile.ranks[mode.key] : { rp: 600, provisional: true, placementGames: 0, tier: 'Multiply Warrior', division: 'III' };
+    var rank = profile.ranks && profile.ranks[mode.key] ? profile.ranks[mode.key] : { rp: 600, tier: 'Multiply Warrior', division: 'III' };
     var progress = rankProgressState(rank);
-    var rankName = rank.provisional ? 'Placement Rank' : rank.tier + (rank.division ? ' ' + rank.division : '');
+    var rankName = rank.tier + (rank.division ? ' ' + rank.division : '');
     var card = document.createElement('button');
     card.type = 'button';
     card.className = 'home-rank-card ' + rankTierClass(rank.tier);
@@ -1353,7 +1349,7 @@ function renderRankedLadder(mode, body) {
   var tbody = document.createElement('tbody');
   entries.forEach(function (entry) {
     var row = document.createElement('tr');
-    var values = ['#' + entry.rank, entry.name, entry.provisional ? 'Placement (' + entry.placementGames + '/5)' : entry.tier + (entry.division ? ' ' + entry.division : ''), entry.rp];
+    var values = ['#' + entry.rank, entry.name, entry.tier + (entry.division ? ' ' + entry.division : ''), entry.rp];
     values.forEach(function (value, index) {
       var cell = document.createElement('td'); cell.textContent = value;
       if (index === 0) cell.className = 'leaderboard-rank';
@@ -1405,7 +1401,7 @@ function renderProfile() {
   var html = '';
   if (STATE.profileTab === 'overview') {
     html = '<div class="profile-grid">' + profileCard('Battles',p.overview.totalGames) + profileCard('Victories',p.overview.totalWins) + profileCard('Win Rate',p.overview.winRate+'%') + profileCard('Accuracy',p.overview.accuracy+'%') + profileCard('Best Streak',p.overview.bestWinStreak) + profileCard('Season','Season '+p.season.number) + '</div>';
-    html += '<div class="profile-grid" style="margin-top:9px">'; ['solo','multiplayer','sprint'].forEach(function(mode){var r=p.ranks[mode];html+=profileCard(modeTitle(mode),(r.provisional?'Placement '+r.placementGames+'/5':r.tier+(r.division?' '+r.division:''))+' · '+r.rp+' RP','profile-rank');}); html += '</div>';
+    html += '<div class="profile-grid" style="margin-top:9px">'; ['solo','multiplayer','sprint'].forEach(function(mode){var r=p.ranks[mode];html+=profileCard(modeTitle(mode),r.tier+(r.division?' '+r.division:'')+' · '+r.rp+' RP','profile-rank');}); html += '</div>';
     html += '<div class="profile-badges" style="margin-top:12px">' + (p.badges.length ? p.badges.map(function(b){return '<span class="profile-badge">'+escapeHtml(BADGE_NAMES[b.key]||b.key)+'</span>';}).join('') : '<span class="profile-state">No badges yet</span>') + '</div>';
   } else if (STATE.profileTab === 'battlefield') {
     html = '<div class="profile-grid">'; ['solo','multiplayer','sprint'].forEach(function(mode){var m=p.modes[mode]; html += profileCard(modeTitle(mode),m.wins+'W / '+m.losses+'L · '+m.winRate+'%');}); html += profileCard('Recent Form',(p.recentForm||[]).map(function(x){return x==='win'?'W':'L';}).join(' ')||'-') + profileCard('Strongest Table',p.strongestTable?'Table '+p.strongestTable.table+' · '+p.strongestTable.accuracy+'%':'-') + profileCard('Weakest Table',p.weakestTable?'Table '+p.weakestTable.table+' · '+p.weakestTable.accuracy+'%':'-') + '</div>';
@@ -2999,7 +2995,10 @@ function showVSOverlay() {
     document.getElementById('header-info').classList.add('show');
     document.getElementById('btn-exit').classList.add('show');
     updateAllUI();
-    startCountdown(function () { Sound.startFight(); });
+    startCountdown(function () {
+      Sound.startFight();
+      send({ type: 'battleReady' });
+    });
   }, 3000);
 }
 

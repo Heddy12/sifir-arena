@@ -237,7 +237,7 @@ async function ensureSchema() {
         mode VARCHAR(16) NOT NULL CHECK (mode IN ('solo', 'multiplayer', 'sprint')),
         rp INTEGER NOT NULL DEFAULT 600 CHECK (rp >= 0),
         peak_rp INTEGER NOT NULL DEFAULT 600 CHECK (peak_rp >= 0),
-        placement_games INTEGER NOT NULL DEFAULT 0,
+        placement_games INTEGER NOT NULL DEFAULT 5,
         shield_tiers TEXT NOT NULL DEFAULT '[]',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (profile_id, season_id, mode)
@@ -424,9 +424,9 @@ async function ensureCurrentSeason(client) {
       const oldRp = Number(row.rp);
       const resetRp = oldRp < 900 ? oldRp : Math.min(1500, 900 + Math.floor((oldRp - 900) * 0.5));
       await db.query(
-        `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games)
-         VALUES ($1, $2, $3, $4, $4, 0) ON CONFLICT DO NOTHING`,
-        [row.profile_id, seasonId, row.mode, resetRp]
+        `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games, shield_tiers)
+         VALUES ($1, $2, $3, $4, $4, 5, $5) ON CONFLICT DO NOTHING`,
+        [row.profile_id, seasonId, row.mode, resetRp, JSON.stringify([rankInfo(resetRp, null).key])]
       );
     }
   }
@@ -443,11 +443,10 @@ async function ensureProfileRows(client, profile, initialRanks) {
   const season = await ensureCurrentSeason(client);
   for (const mode of RANK_MODES) {
     const initial = initialRanks && Number.isInteger(initialRanks[mode]) ? initialRanks[mode] : 600;
-    const placements = initialRanks ? 5 : 0;
     await client.query(
-      `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games)
-       VALUES ($1, $2, $3, $4, $4, $5) ON CONFLICT DO NOTHING`,
-      [normalized.profileId, season.season_id, mode, initial, placements]
+      `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games, shield_tiers)
+       VALUES ($1, $2, $3, $4, $4, 5, $5) ON CONFLICT DO NOTHING`,
+      [normalized.profileId, season.season_id, mode, initial, JSON.stringify([rankInfo(initial, null).key])]
     );
   }
   return normalized;
@@ -463,6 +462,13 @@ async function initialize() {
     const accounts = await client.query('SELECT account_id, player_name FROM player_accounts');
     for (const row of accounts.rows) {
       await ensureProfileRows(client, { profileId: row.account_id, name: row.player_name });
+    }
+    const unfinishedPlacements = await client.query('SELECT profile_id, season_id, mode, rp FROM player_rank_stats WHERE placement_games < 5');
+    for (const row of unfinishedPlacements.rows) {
+      await client.query(
+        'UPDATE player_rank_stats SET placement_games = 5, shield_tiers = $4 WHERE profile_id = $1 AND season_id = $2 AND mode = $3',
+        [row.profile_id, row.season_id, row.mode, JSON.stringify([rankInfo(Number(row.rp), null).key])]
+      );
     }
     await client.query(
       `INSERT INTO player_mode_stats
@@ -667,7 +673,7 @@ async function getRankedLadder(mode, limit) {
     const season = await ensureCurrentSeason(client);
     const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 50));
     const result = await client.query(
-      `SELECT r.profile_id, p.display_name, d.avatar_key, r.rp, r.peak_rp, r.placement_games
+      `SELECT r.profile_id, p.display_name, d.avatar_key, r.rp, r.peak_rp
        FROM player_rank_stats r
        JOIN leaderboard_profiles p ON p.profile_id = r.profile_id
        LEFT JOIN player_profile_details d ON d.profile_id = r.profile_id
@@ -685,8 +691,6 @@ async function getRankedLadder(mode, limit) {
           avatarKey: row.avatar_key || 'hero-blue',
           rp: Number(row.rp),
           peakRp: Number(row.peak_rp),
-          placementGames: Number(row.placement_games),
-          provisional: Number(row.placement_games) < 5,
           tier: info.name,
           division: info.division
         };
@@ -704,16 +708,15 @@ async function getRankSnapshot(profileId, mode) {
   try {
     const season = await ensureCurrentSeason(client);
     const result = await client.query(
-      'SELECT rp, peak_rp, placement_games FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = $3',
+      'SELECT rp, peak_rp FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = $3',
       [profileId, season.season_id, mode]
     );
     const row = result.rows[0];
-    if (!row) return { rp: 600, peakRp: 600, placementGames: 0, provisional: true };
+    if (!row) return { rp: 600, peakRp: 600, position: null, tier: 'Multiply Warrior', division: 'III' };
     const position = await rankPosition(client, season.season_id, mode, profileId, Number(row.rp));
     const info = rankInfo(Number(row.rp), position);
     return {
-      rp: Number(row.rp), peakRp: Number(row.peak_rp), placementGames: Number(row.placement_games),
-      provisional: Number(row.placement_games) < 5, position: position, tier: info.name, division: info.division
+      rp: Number(row.rp), peakRp: Number(row.peak_rp), position: position, tier: info.name, division: info.division
     };
   } finally {
     client.release();
@@ -772,7 +775,7 @@ async function getPlayerProfile(playerName, viewerProfileId) {
       client.query('SELECT card_id, uses FROM player_card_stats WHERE profile_id = $1 ORDER BY uses DESC, card_id LIMIT 10', [profile.profile_id]),
       client.query('SELECT badge_key, earned_at FROM player_badges WHERE profile_id = $1 ORDER BY earned_at', [profile.profile_id]),
       client.query('SELECT * FROM player_match_history WHERE profile_id = $1 ORDER BY played_at DESC LIMIT 50', [profile.profile_id]),
-      client.query('SELECT mode, rp, peak_rp, placement_games FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2', [profile.profile_id, season.season_id]),
+      client.query('SELECT mode, rp, peak_rp FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2', [profile.profile_id, season.season_id]),
       client.query('SELECT mode, best_score, best_correct, best_wrong, best_accuracy, wins, games_played FROM leaderboard_stats WHERE profile_id = $1', [profile.profile_id])
     ]);
 
@@ -781,12 +784,11 @@ async function getPlayerProfile(playerName, viewerProfileId) {
       const position = await rankPosition(client, season.season_id, row.mode, profile.profile_id, Number(row.rp));
       const info = rankInfo(Number(row.rp), position);
       ranks[row.mode] = {
-        rp: Number(row.rp), peakRp: Number(row.peak_rp), placementGames: Number(row.placement_games),
-        provisional: Number(row.placement_games) < 5, position: position, tier: info.name, division: info.division
+        rp: Number(row.rp), peakRp: Number(row.peak_rp), position: position, tier: info.name, division: info.division
       };
     }
     RANK_MODES.forEach(function (mode) {
-      if (!ranks[mode]) ranks[mode] = { rp: 600, peakRp: 600, placementGames: 0, provisional: true, position: null, tier: 'Multiply Warrior', division: 'III' };
+      if (!ranks[mode]) ranks[mode] = { rp: 600, peakRp: 600, position: null, tier: 'Multiply Warrior', division: 'III' };
     });
 
     const modes = {};
@@ -875,19 +877,17 @@ function normalizedParticipant(participant) {
   };
 }
 
-function pvpRankDelta(playerRp, opponentRp, winner, placementGames, accuracy, attempts) {
+function pvpRankDelta(playerRp, opponentRp, winner, accuracy, attempts) {
   const expected = 1 / (1 + Math.pow(10, (opponentRp - playerRp) / 400));
-  const factor = placementGames < 5 ? 48 : 32;
+  const factor = 32;
   let delta = Math.round(factor * ((winner ? 1 : 0) - expected));
   if (attempts >= 5 && accuracy >= 90) delta += winner ? 3 : 3;
   if (attempts >= 5 && accuracy < 60) delta += winner ? -3 : -3;
   return winner ? Math.max(5, Math.min(35, delta)) : Math.min(-5, Math.max(-35, delta));
 }
 
-function soloRankDelta(winner, placementGames, accuracy) {
-  let delta = winner ? 18 + Math.floor(accuracy / 10) : -18 + Math.floor(accuracy / 20);
-  if (placementGames < 5) delta = Math.round(delta * 1.5);
-  return delta;
+function soloRankDelta(winner, accuracy) {
+  return winner ? 18 + Math.floor(accuracy / 10) : -18 + Math.floor(accuracy / 20);
 }
 
 async function awardBadges(client, profileId, event) {
@@ -940,7 +940,7 @@ async function recordCompletedMatch(input) {
     const rankRows = {};
     for (const participant of participants) {
       const result = await client.query(
-        'SELECT rp, peak_rp, placement_games, shield_tiers FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = $3 FOR UPDATE',
+        'SELECT rp, peak_rp, shield_tiers FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = $3 FOR UPDATE',
         [participant.profileId, season.season_id, mode]
       );
       rankRows[participant.profileId] = result.rows[0];
@@ -956,11 +956,11 @@ async function recordCompletedMatch(input) {
       let shields = parseJson(row.shield_tiers, []);
       if (ranked) {
         if (mode === 'solo' || participants.length === 1) {
-          delta = soloRankDelta(participant.winner, Number(row.placement_games), participant.accuracy);
+          delta = soloRankDelta(participant.winner, participant.accuracy);
         } else {
           const opponent = participants.find(function (other) { return other.profileId !== participant.profileId; });
           const opponentRow = rankRows[opponent.profileId];
-          delta = pvpRankDelta(before, Number(opponentRow.rp), participant.winner, Number(row.placement_games), participant.accuracy, participant.correct + participant.wrong);
+          delta = pvpRankDelta(before, Number(opponentRow.rp), participant.winner, participant.accuracy, participant.correct + participant.wrong);
         }
         after = Math.max(0, before + delta);
         const beforeInfo = rankInfo(before, null);
@@ -972,13 +972,11 @@ async function recordCompletedMatch(input) {
           shieldUsed = true;
           shields = shields.filter(function (key) { return key !== beforeInfo.key; });
         }
-        const placementGames = Math.min(5, Number(row.placement_games) + 1);
-        if (placementGames === 5 && !shields.includes(afterInfo.key)) shields.push(afterInfo.key);
         await client.query(
           `UPDATE player_rank_stats SET rp = $4, peak_rp = GREATEST(peak_rp, $4),
-             placement_games = $5, shield_tiers = $6, updated_at = NOW()
+             shield_tiers = $5, updated_at = NOW()
            WHERE profile_id = $1 AND season_id = $2 AND mode = $3`,
-          [participant.profileId, season.season_id, mode, after, placementGames, JSON.stringify(shields)]
+          [participant.profileId, season.season_id, mode, after, JSON.stringify(shields)]
         );
       }
 

@@ -85,6 +85,21 @@ async function run() {
     const starts = await Promise.all([startA, startB]);
     assert.strictEqual(starts[0].settings.timer, 6);
     assert.strictEqual(starts[1].players.length, 2);
+    let earlyTurn = false;
+    function detectEarlyTurn(raw) { try { if (JSON.parse(raw).type === 'newTurn') earlyTurn = true; } catch (error) {} }
+    playerA.on('message', detectEarlyTurn);
+    playerB.on('message', detectEarlyTurn);
+    await new Promise(function (resolve) { setTimeout(resolve, 80); });
+    assert.strictEqual(earlyTurn, false, 'question timer must not start before countdown readiness');
+    playerA.send(JSON.stringify({ type: 'battleReady' }));
+    await new Promise(function (resolve) { setTimeout(resolve, 40); });
+    assert.strictEqual(earlyTurn, false, 'server must wait for both human players');
+    const firstTurn = waitForMessage(playerA, 'newTurn');
+    playerB.send(JSON.stringify({ type: 'battleReady' }));
+    const turn = await firstTurn;
+    assert.strictEqual(turn.timer, 6);
+    playerA.off('message', detectEarlyTurn);
+    playerB.off('message', detectEarlyTurn);
     const reconnectNotice = waitForMessage(playerB, 'opponentReconnecting');
     playerA.terminate();
     assert.strictEqual((await reconnectNotice).graceSeconds, 1);
@@ -113,6 +128,9 @@ async function run() {
     const botGame = await botStart;
     assert.strictEqual(botGame.players[1].name, botMatch.opponentName);
     assert.strictEqual(botGame.gameMode, 'ffa');
+    const botTurn = waitForMessage(playerC, 'newTurn');
+    playerC.send(JSON.stringify({ type: 'battleReady' }));
+    assert.strictEqual((await botTurn).timer, 6);
     playerC.close();
 
     const cookieD = await register(base, 'Delta');
@@ -143,6 +161,9 @@ async function run() {
     const sprintGame = await sprintStart;
     assert.strictEqual(sprintGame.gameMode, 'sprint');
     assert.strictEqual(sprintGame.sprint, true);
+    const sprintFirstQuestion = waitForMessage(playerD, 'newTurn');
+    playerD.send(JSON.stringify({ type: 'battleReady' }));
+    assert.strictEqual((await sprintFirstQuestion).sprint, true);
 
     const cookieE = await register(base, 'Echo');
     const cookieF = await register(base, 'Foxtrot');

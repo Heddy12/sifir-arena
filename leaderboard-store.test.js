@@ -58,6 +58,9 @@ async function run() {
   assert.strictEqual(profile.player.name, 'Hero_Test');
   assert.strictEqual(profile.progression.level, 1);
   assert.deepStrictEqual(Object.keys(profile.ranks).sort(), ['multiplayer', 'solo', 'sprint']);
+  assert.strictEqual(profile.ranks.solo.tier, 'Multiply Warrior');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(profile.ranks.solo, 'provisional'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(profile.ranks.solo, 'placementGames'), false);
   await store.updateProfile(registered.account.accountId, { avatarKey: 'hero-gold', bio: 'Learning every table!' });
   profile = await store.getPlayerProfile('Hero_Test', registered.account.accountId);
   assert.strictEqual(profile.player.avatarKey, 'hero-gold');
