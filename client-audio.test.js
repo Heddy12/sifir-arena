@@ -58,6 +58,7 @@ function createAudioHarness() {
     this.playCount = 0;
     this.pauseCount = 0;
     this.setAttribute = function () {};
+    this.load = function () {};
     this.play = function () { this.playCount++; return Promise.resolve(); };
     this.pause = function () { this.pauseCount++; };
     harness.mediaPlayers.push(this);
@@ -100,8 +101,11 @@ function run() {
   const loaded = loadClientAudio();
   const Sound = loaded.Sound;
   const musicPath = path.join(__dirname, 'audio', 'menu-go.mp3');
+  const battleMusicPath = path.join(__dirname, 'audio', 'battle-war-drums.mp3');
   assert.ok(fs.existsSync(musicPath), 'menu music asset should exist');
   assert.ok(fs.statSync(musicPath).size > 1000000, 'menu music asset should not be empty');
+  assert.ok(fs.existsSync(battleMusicPath), 'battle music asset should exist');
+  assert.ok(fs.statSync(battleMusicPath).size > 1000000, 'battle music asset should not be empty');
   assert.strictEqual(Sound.init(), true);
 
   const beforeMutedSfx = loaded.audio.oscillators;
@@ -126,8 +130,13 @@ function run() {
   assert.strictEqual(Sound.sfxEnabled, sfxStateBeforeMusicToggle, 'music toggle must not change SFX');
   assert.strictEqual(loaded.storage.get('sifirMusicEnabled'), '0');
   assert.strictEqual(Sound.toggleMusic(), true);
-  Sound.stopMusicForBattle();
-  assert.strictEqual(loaded.audio.mediaPlayers[0].pauseCount, 2, 'battle should stop menu music');
+  Sound.playBattleMusic();
+  assert.strictEqual(loaded.audio.mediaPlayers.length, 1, 'menu and battle should reuse one unlocked audio player');
+  assert.strictEqual(loaded.audio.mediaPlayers[0].src, '/audio/battle-war-drums.mp3');
+  assert.strictEqual(loaded.audio.mediaPlayers[0].volume, 0.24);
+  assert.strictEqual(Sound.musicMode, 'battle');
+  Sound.stopMusic();
+  assert.strictEqual(loaded.audio.mediaPlayers[0].pauseCount, 3, 'music should stop after battle');
   assert.strictEqual(Sound.musicWanted, false);
   assert.strictEqual(loaded.html.includes('id="music-toggle"'), true, 'music control should be visible');
   assert.strictEqual(loaded.html.includes('sifirMusicEnabled'), true, 'music preference should be stored separately');

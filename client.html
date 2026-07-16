@@ -627,7 +627,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 </head>
 <body class="auth-pending">
 <button class="sound-toggle" id="sound-toggle" title="Sound effects on" aria-label="Sound effects on" aria-pressed="true">&#128266;</button>
-<button class="music-toggle" id="music-toggle" title="Menu music on" aria-label="Menu music on" aria-pressed="true">&#127925;</button>
+<button class="music-toggle" id="music-toggle" title="Music on" aria-label="Music on" aria-pressed="true">&#127925;</button>
 <button class="info-toggle" id="info-toggle" title="Magic Cards Info">?</button>
 
 <header>
@@ -1488,6 +1488,7 @@ var Sound = {
   music: null,
   musicEnabled: true,
   musicWanted: false,
+  musicMode: null,
   loadPreferences: function () {
     try {
       var savedSfx = localStorage.getItem('sifirSfxEnabled');
@@ -1529,10 +1530,9 @@ var Sound = {
     try {
       var AudioPlayer = window.Audio;
       if (!AudioPlayer) return false;
-      this.music = new AudioPlayer('/audio/menu-go.mp3');
+      this.music = new AudioPlayer();
       this.music.loop = true;
       this.music.preload = 'auto';
-      this.music.volume = 0.2;
       this.music.setAttribute('playsinline', '');
       return true;
     } catch (e) {
@@ -1540,18 +1540,33 @@ var Sound = {
       return false;
     }
   },
-  playMenuMusic: function () {
+  playMusicTrack: function (mode) {
     this.musicWanted = true;
+    this.musicMode = mode === 'battle' ? 'battle' : 'menu';
     if (!this.musicEnabled || document.hidden || !this.initMusic()) return;
     try {
+      var source = this.musicMode === 'battle' ? '/audio/battle-war-drums.mp3' : '/audio/menu-go.mp3';
+      if (!this.music.src || this.music.src.indexOf(source) === -1) {
+        if (this.music.src) this.music.pause();
+        this.music.src = source;
+        this.music.currentTime = 0;
+        if (typeof this.music.load === 'function') this.music.load();
+      }
+      this.music.volume = this.musicMode === 'battle' ? 0.24 : 0.2;
       var playback = this.music.play();
       if (playback && typeof playback.catch === 'function') playback.catch(function () {});
     } catch (e) {}
   },
-  stopMusicForBattle: function () {
+  playMenuMusic: function () { this.playMusicTrack('menu'); },
+  playBattleMusic: function () { this.playMusicTrack('battle'); },
+  stopMusic: function () {
     this.musicWanted = false;
+    this.musicMode = null;
     if (!this.music) return;
     try { this.music.pause(); this.music.currentTime = 0; } catch (e) {}
+  },
+  resumeMusic: function () {
+    if (this.musicWanted && this.musicMode) this.playMusicTrack(this.musicMode);
   },
   pauseMusic: function () {
     if (!this.music) return;
@@ -1585,7 +1600,7 @@ var Sound = {
   toggleMusic: function () {
     this.musicEnabled = !this.musicEnabled;
     this.savePreferences();
-    if (this.musicEnabled && this.musicWanted) this.playMenuMusic();
+    if (this.musicEnabled && this.musicWanted) this.resumeMusic();
     else if (!this.musicEnabled) this.pauseMusic();
     return this.musicEnabled;
   }
@@ -1605,8 +1620,8 @@ function updateAudioButtons() {
     musicButton.textContent = Sound.musicEnabled ? '\uD83C\uDFB5' : '\uD83C\uDFB5\u00D7';
     musicButton.classList.toggle('muted', !Sound.musicEnabled);
     musicButton.setAttribute('aria-pressed', Sound.musicEnabled ? 'true' : 'false');
-    musicButton.setAttribute('aria-label', Sound.musicEnabled ? 'Menu music on' : 'Menu music off');
-    musicButton.title = Sound.musicEnabled ? 'Menu music on' : 'Menu music off';
+    musicButton.setAttribute('aria-label', Sound.musicEnabled ? 'Music on' : 'Music off');
+    musicButton.title = Sound.musicEnabled ? 'Music on' : 'Music off';
   }
 }
 
@@ -1899,7 +1914,7 @@ function renderWeakTableReport(report) {
 
 /* ==================== SINGLE PLAYER MODE (SOLO QUEST) ==================== */
 function startSoloGame() {
-  Sound.stopMusicForBattle();
+  Sound.playBattleMusic();
   var settings = STATE.settings;
   var playerCards = dealCards();
 
@@ -2130,6 +2145,7 @@ function soloCheckWin() {
   for (var i = 0; i < players.length; i++) {
     if (players[i].hp <= 0) {
       STATE.battleActive = false;
+      Sound.stopMusic();
       stopTimerDisplay();
       var winnerIdx = 1 - i;
       var winner = players[winnerIdx];
@@ -2526,7 +2542,7 @@ function handleMessage(msg) {
       break;
 
     case 'gameStart':
-      Sound.stopMusicForBattle();
+      Sound.playBattleMusic();
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.matchType = msg.matchType || 'room';
@@ -2555,7 +2571,7 @@ function handleMessage(msg) {
       break;
 
     case 'matchResume':
-      Sound.stopMusicForBattle();
+      Sound.playBattleMusic();
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.you = msg.you; STATE.players = msg.players; STATE.yourCards = msg.yourCards || [];
@@ -2773,6 +2789,7 @@ function handleMessage(msg) {
     case 'gameOver':
       if (!STATE.battleActive) return;
       STATE.battleActive = false;
+      Sound.stopMusic();
       stopTimerDisplay();
       if (STATE.isSprint) {
         document.getElementById('sprint-timer').classList.remove('show');
@@ -2829,6 +2846,7 @@ function handleMessage(msg) {
 
     case 'opponentLeft':
       STATE.battleActive = false;
+      Sound.stopMusic();
       stopTimerDisplay();
       document.getElementById('disconnect-msg').textContent = 'Opponent disconnected';
       document.getElementById('disconnect-overlay').classList.add('show');
@@ -2902,7 +2920,7 @@ function fallbackCopyRoomCode(code, onSuccess) {
 }
 
 function showVSScreen(opponentName) {
-  Sound.stopMusicForBattle();
+  Sound.playBattleMusic();
   var myName = document.getElementById('player-name').value.trim() || 'Player';
   // Update fighter cards
   document.getElementById('name-left').textContent = STATE.you === 0 ? myName : opponentName;
@@ -2912,7 +2930,7 @@ function showVSScreen(opponentName) {
 }
 
 function showVSOverlay() {
-  Sound.stopMusicForBattle();
+  Sound.playBattleMusic();
   setInfernoArena(true);
   var p1Name = STATE.players[0].name;
   var p2Name = STATE.players[1].name;
@@ -3574,11 +3592,10 @@ function initEventListeners() {
     updateAudioButtons();
     if (enabled) Sound.click();
   });
-  // Menu music toggle (music is always stopped during VS, countdown and battle)
+  // One music toggle controls both the menu track and the battle track.
   document.getElementById('music-toggle').addEventListener('click', function () {
-    var enabled = Sound.toggleMusic();
+    Sound.toggleMusic();
     updateAudioButtons();
-    if (enabled && !STATE.battleActive) Sound.playMenuMusic();
   });
   // Info toggle
   document.getElementById('info-toggle').addEventListener('click', function () {
@@ -3636,7 +3653,7 @@ function init() {
   document.addEventListener('pointerdown', unlockAudio, { once: true });
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) Sound.pauseMusic();
-    else if (Sound.musicWanted && !STATE.battleActive) Sound.playMenuMusic();
+    else if (Sound.musicWanted) Sound.resumeMusic();
   });
   document.getElementById('header-subtitle').classList.add('hide');
   initEventListeners();
