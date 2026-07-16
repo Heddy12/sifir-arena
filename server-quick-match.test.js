@@ -69,7 +69,7 @@ async function run() {
     const searchingA = waitForMessage(playerA, 'quickMatchSearching');
     playerA.send(JSON.stringify({ type: 'quickMatch' }));
     const searchState = await searchingA;
-    assert.strictEqual(searchState.settings.timer, 20);
+    assert.strictEqual(searchState.settings.timer, 6);
     assert.strictEqual(searchState.settings.sifir, 0);
     assert.strictEqual(searchState.settings.difficulty, 'random');
 
@@ -82,7 +82,7 @@ async function run() {
     assert.strictEqual(paired[0].opponentName, 'Quick_Bravo');
     assert.strictEqual(paired[1].opponentName, 'Quick_Alpha');
     const starts = await Promise.all([startA, startB]);
-    assert.strictEqual(starts[0].settings.timer, 20);
+    assert.strictEqual(starts[0].settings.timer, 6);
     assert.strictEqual(starts[1].players.length, 2);
     playerA.close();
     playerB.close();

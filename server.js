@@ -39,7 +39,7 @@ const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
-const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
+const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
 
 leaderboard.initialize().then(function (ready) {
   if (ready) console.log('Leaderboard database ready');
@@ -181,6 +181,14 @@ function isRankedSettings(settings, mode) {
   return Number(source.timer) === 20;
 }
 
+function isRankedRoom(room) {
+  if (!room) return false;
+  if (room.matchType === 'quick' && room.gameMode === 'ffa') {
+    return Number(room.settings.timer) === 6 && Number(room.settings.sifir) === 0 && room.settings.difficulty === 'random';
+  }
+  return isRankedSettings(room.settings, room.gameMode);
+}
+
 function normalizeResultStats(stats) {
   const source = stats && typeof stats === 'object' ? stats : {};
   const score = Number(source.score);
@@ -209,7 +217,7 @@ function recordRoomLeaderboard(room, winnerIdx) {
   if (!room || room.leaderboardRecorded) return;
   room.leaderboardRecorded = true;
   const mode = room.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
-  if (!isRankedSettings(room.settings, room.gameMode)) {
+  if (!isRankedRoom(room)) {
     broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: false, recorded: false, reason: 'custom-settings' });
     return;
   }
@@ -1032,7 +1040,7 @@ function endSprint(room) {
     winnerIdx: winnerIdx,
     winnerName: winner.name,
     sprint: true,
-    ranked: isRankedSettings(room.settings, 'sprint'),
+    ranked: isRankedRoom(room),
     learningReports: getLearningReports(room),
     stats: {
       score: winner.score,
@@ -1058,7 +1066,7 @@ function checkWin(room) {
         type: 'gameOver',
         winnerIdx: winnerIdx,
         winnerName: winner.name,
-        ranked: isRankedSettings(room.settings, 'ffa'),
+        ranked: isRankedRoom(room),
         learningReports: getLearningReports(room),
         stats: {
           score: winner.score,

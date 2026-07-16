@@ -760,7 +760,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the global leaderboard.</div>
     <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
-    <div class="quick-match-note" id="quick-match-note">Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 20s.</div>
+    <div class="quick-match-note" id="quick-match-note">Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 6s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -915,7 +915,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <button class="leaderboard-tab" data-leaderboard-mode="multiplayer">Multiplayer</button>
       <button class="leaderboard-tab" data-leaderboard-mode="sprint">Sprint</button>
     </div>
-    <div class="leaderboard-preset">Ranked preset: All Tables, Random difficulty, 20s timer; Sprint uses 60s.</div>
+    <div class="leaderboard-preset">Ranked: Room/Solo 20s, Multiplayer Quick Match 6s, Sprint 60s. All Tables dan Random.</div>
     <div id="leaderboard-content" aria-live="polite"></div>
     <div class="leaderboard-note">Top 10 global. Rekod disimpan pada akaun pemain anda.</div>
   </div>
@@ -2087,7 +2087,7 @@ function applyModeState(mode) {
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
     ? 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 60s Sprint.'
-    : 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 20s.';
+    : 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 6s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -3220,7 +3220,7 @@ function initEventListeners() {
     var quickMode = STATE.gameMode === 'sprint' ? 'sprint' : 'ffa';
     STATE.settings = quickMode === 'sprint'
       ? { timer: 60, sprintTime: 60, sifir: 0, difficulty: 'random', gameMode: 'sprint' }
-      : { timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: 60 };
+      : { timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: 60 };
     if (!send({ type: 'setName' })) return;
     send({ type: 'quickMatch', gameMode: quickMode });
   });
