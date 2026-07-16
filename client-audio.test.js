@@ -101,6 +101,7 @@ function run() {
   assert.strictEqual(typeof Sound.playMusic, 'undefined', 'music engine should be removed');
   assert.strictEqual(loaded.html.includes('id="music-toggle"'), false, 'music control should not be visible');
   assert.strictEqual(loaded.html.includes('sifirMusicEnabled'), false, 'music preference should no longer be stored');
+  assert.ok(loaded.html.includes('&#128266;'), 'SFX control should use a clear speaker icon');
   assert.deepStrictEqual(
     JSON.parse(JSON.stringify(loaded.rankProgressState({ tier: 'Multiply Warrior', rp: 650 }))),
     { percent: 50, detail: '50 RP to next' }
