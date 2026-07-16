@@ -69,6 +69,7 @@ const CARD_POOL = [
 const rooms = {};
 const players = {};
 const quickMatchQueue = [];
+const botRotationFallback = new Map();
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -220,6 +221,30 @@ function leaderboardProfile(playerId) {
   return { profileId: player.profileId, name: player.name || 'Player' };
 }
 
+function updateCompletedQuickMatchRotation(room, participants, mode) {
+  if (!room || room.matchType !== 'quick') return;
+  const humans = participants.filter(function (participant) { return !participant.isBot; });
+  const bot = participants.find(function (participant) { return participant.isBot; });
+  if (!bot && humans.length === 2) {
+    beginPlayerBotRotations(humans, mode);
+    return;
+  }
+  if (!bot || humans.length !== 1 || !room.botRotation) return;
+  const human = humans[0];
+  if (room.botRotation.profileId !== human.profileId) return;
+  if (room.forfeitedPlayerId && room.forfeitedPlayerId === human.playerId) {
+    sendToPlayer(human.playerId, {
+      type: 'botRotationProgress', mode: mode, active: true,
+      completed: Number(room.botRotation.state.completed) || 0,
+      total: botCatalog.BOT_PROFILES.length,
+      position: Number(room.botRotation.state.position) || 1,
+      incomplete: true
+    });
+    return;
+  }
+  completePlayerBotRotation(human, mode, bot.profileId);
+}
+
 function recordRoomLeaderboard(room, winnerIdx) {
   if (!room || room.leaderboardRecorded) return;
   room.leaderboardRecorded = true;
@@ -277,6 +302,7 @@ function recordRoomLeaderboard(room, winnerIdx) {
     durationSeconds: room.startedAt ? (Date.now() - room.startedAt) / 1000 : 0,
     participants: completedParticipants
   });
+  updateCompletedQuickMatchRotation(room, completedParticipants, mode);
 
   Promise.all([leaderboardOperation, profileOperation]).then(function (results) {
     broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: ranked, recorded: true, reason: ranked ? null : 'custom-settings' });
@@ -378,7 +404,9 @@ function createRoom(playerId, settings) {
     countdownFallback: null,
     readyPlayers: {},
     matchType: 'room',
-    botProfileId: null
+    botProfileId: null,
+    botRotation: null,
+    forfeitedPlayerId: null
   };
   players[playerId].roomCode = code;
   players[playerId].playerIdx = 0;
@@ -394,6 +422,90 @@ function joinRoom(playerId, code) {
   players[playerId].roomCode = code;
   players[playerId].playerIdx = 1;
   return { success: true, room: room };
+}
+
+function rotationModeForGame(gameMode) {
+  return gameMode === 'sprint' ? 'sprint' : 'multiplayer';
+}
+
+function rotationKey(profileId, mode) {
+  return profileId + ':' + mode;
+}
+
+function publicRotationState(state) {
+  if (!state) return null;
+  return {
+    active: !!state.active,
+    completed: Number(state.completed) || 0,
+    total: Number(state.total) || botCatalog.BOT_PROFILES.length,
+    position: state.position === null || state.position === undefined ? null : Number(state.position),
+    opponentName: state.bot && state.bot.name ? state.bot.name : null
+  };
+}
+
+function fallbackRotationState(profileId, mode) {
+  const state = botRotationFallback.get(rotationKey(profileId, mode));
+  if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.BOT_PROFILES.length, position: null, bot: null };
+  const bot = botCatalog.BOT_PROFILES[state.index];
+  return { active: !!bot, completed: state.index, total: botCatalog.BOT_PROFILES.length, position: bot ? state.index + 1 : null, botIndex: state.index, bot: bot || null };
+}
+
+async function beginPlayerBotRotations(participants, mode) {
+  const humans = participants.filter(function (participant) { return !participant.isBot; });
+  const profileIds = humans.map(function (participant) { return participant.profileId; });
+  profileIds.forEach(function (profileId) {
+    botRotationFallback.set(rotationKey(profileId, mode), { active: true, index: 0, pendingBotProfileId: null });
+  });
+  try { await leaderboard.beginBotRotation(profileIds, mode); } catch (error) {
+    console.error('Bot rotation persistence unavailable:', error.message);
+  }
+  humans.forEach(function (participant) {
+    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.BOT_PROFILES.length, position: 1 });
+  });
+}
+
+async function claimPlayerBotRotation(player, mode) {
+  if (!player || !player.profileId) return null;
+  const key = rotationKey(player.profileId, mode);
+  const rawMemory = botRotationFallback.get(key);
+  if (rawMemory && !rawMemory.active && rawMemory.index >= botCatalog.BOT_PROFILES.length) return null;
+  const memory = fallbackRotationState(player.profileId, mode);
+  if (memory.active) return memory;
+  try {
+    const persisted = await leaderboard.claimBotRotation(player.profileId, mode);
+    if (persisted.active) {
+      botRotationFallback.set(key, { active: true, index: persisted.botIndex, pendingBotProfileId: persisted.bot.profileId });
+      return persisted;
+    }
+    return null;
+  } catch (error) {
+    return memory.active ? memory : null;
+  }
+}
+
+async function completePlayerBotRotation(participant, mode, botProfileId) {
+  if (!participant || !participant.profileId) return null;
+  const key = rotationKey(participant.profileId, mode);
+  const memory = botRotationFallback.get(key);
+  let memoryProgress = null;
+  if (memory && memory.active) {
+    const expected = botCatalog.BOT_PROFILES[memory.index];
+    if (expected && expected.profileId === botProfileId) {
+      memory.index++;
+      memory.pendingBotProfileId = null;
+      memory.active = memory.index < botCatalog.BOT_PROFILES.length;
+      botRotationFallback.set(key, memory);
+      memoryProgress = fallbackRotationState(participant.profileId, mode);
+      if (!memory.active) memoryProgress.completed = botCatalog.BOT_PROFILES.length;
+    }
+  }
+  let progress = memoryProgress;
+  try {
+    const persisted = await leaderboard.completeBotRotation(participant.profileId, mode, botProfileId);
+    if (persisted.advanced || !progress) progress = persisted;
+  } catch (error) {}
+  if (progress) sendToPlayer(participant.playerId, Object.assign({ type: 'botRotationProgress', mode: mode }, publicRotationState(progress)));
+  return progress;
 }
 
 function removeQuickMatchEntry(playerId) {
@@ -418,16 +530,22 @@ function rankedQuickMatchSettings(gameMode) {
 }
 
 function sendQuickMatchFound(playerId, opponentId, you, room) {
+  const rotation = room.botRotation && room.botRotation.profileId === players[playerId].profileId
+    ? publicRotationState(room.botRotation.state)
+    : null;
   sendToPlayer(playerId, {
     type: 'quickMatchFound',
     opponentName: players[opponentId].name,
     you: you,
     gameMode: room.gameMode,
-    settings: room.settings
+    matchType: room.matchType,
+    opponentIsBot: !!players[opponentId].isBot,
+    settings: room.settings,
+    rotation: rotation
   });
 }
 
-function startQuickMatchRoom(firstPlayerId, secondPlayerId, botProfileId, gameMode) {
+function startQuickMatchRoom(firstPlayerId, secondPlayerId, botProfileId, gameMode, rotation) {
   const settings = rankedQuickMatchSettings(gameMode);
   const code = createRoom(firstPlayerId, settings);
   const joined = joinRoom(secondPlayerId, code);
@@ -435,6 +553,7 @@ function startQuickMatchRoom(firstPlayerId, secondPlayerId, botProfileId, gameMo
   const room = rooms[code];
   room.matchType = 'quick';
   room.botProfileId = botProfileId || null;
+  room.botRotation = rotation ? { profileId: players[firstPlayerId].profileId, state: rotation } : null;
   sendQuickMatchFound(firstPlayerId, secondPlayerId, 0, room);
   sendQuickMatchFound(secondPlayerId, firstPlayerId, 1, room);
   setTimeout(function () {
@@ -463,19 +582,24 @@ async function fallbackQuickMatchToBot(playerId) {
   const entry = removeQuickMatchEntry(playerId);
   const player = players[playerId];
   if (!entry || !player || player.roomCode) return;
-  let profile = botCatalog.chooseBot();
-  try {
-    const rankedMode = entry.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
-    const snapshots = await Promise.all(botCatalog.BOT_PROFILES.map(function (bot) { return leaderboard.getRankSnapshot(bot.profileId, rankedMode); }));
-    let closestDistance = Infinity;
-    snapshots.forEach(function (snapshot, index) {
-      const distance = Math.abs(Number(snapshot && snapshot.rp || 600) - Number(entry.rp || 600));
-      if (distance < closestDistance) { closestDistance = distance; profile = botCatalog.BOT_PROFILES[index]; }
-    });
-  } catch (error) {}
+  let profile = entry.rotation && entry.rotation.bot
+    ? botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === entry.rotation.bot.profileId; })
+    : null;
+  if (!profile) {
+    profile = botCatalog.chooseBot();
+    try {
+      const rankedMode = entry.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
+      const snapshots = await Promise.all(botCatalog.BOT_PROFILES.map(function (bot) { return leaderboard.getRankSnapshot(bot.profileId, rankedMode); }));
+      let closestDistance = Infinity;
+      snapshots.forEach(function (snapshot, index) {
+        const distance = Math.abs(Number(snapshot && snapshot.rp || 600) - Number(entry.rp || 600));
+        if (distance < closestDistance) { closestDistance = distance; profile = botCatalog.BOT_PROFILES[index]; }
+      });
+    } catch (error) {}
+  }
   if (!players[playerId] || players[playerId].roomCode) return;
   const botId = createBotOpponent(profile);
-  const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode);
+  const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode, entry.rotation || null);
   if (!room) {
     delete players[botId];
     sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to start Quick Match.' });
@@ -502,7 +626,7 @@ async function requestQuickMatch(playerId, requestedMode) {
       cancelQuickMatch(playerId, false);
       return requestQuickMatch(playerId, gameMode);
     }
-    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
+    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: existingEntry.rotation ? 350 : QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(existingEntry.rotation) });
     return;
   }
 
@@ -513,8 +637,21 @@ async function requestQuickMatch(playerId, requestedMode) {
       quickMatchQueue.splice(index, 1);
     }
   }
+  const rotationMode = rotationModeForGame(gameMode);
+  const rotation = await claimPlayerBotRotation(player, rotationMode);
+  if (!players[playerId] || players[playerId].roomCode) return;
+  if (rotation && rotation.active && rotation.bot) {
+    const rotationEntry = { playerId: playerId, gameMode: gameMode, rp: playerRp, queuedAt: Date.now(), timeout: null, rotation: rotation };
+    rotationEntry.timeout = setTimeout(function () { fallbackQuickMatchToBot(playerId); }, 300);
+    quickMatchQueue.push(rotationEntry);
+    sendToPlayer(playerId, {
+      type: 'quickMatchSearching', waitMs: 300, gameMode: gameMode,
+      settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(rotation)
+    });
+    return;
+  }
   const opponentIndex = quickMatchQueue.findIndex(function (entry) {
-    if (entry.playerId === playerId || entry.gameMode !== gameMode) return false;
+    if (entry.playerId === playerId || entry.gameMode !== gameMode || entry.rotation) return false;
     const elapsed = Date.now() - entry.queuedAt;
     const range = elapsed < 4000 ? 150 : 300;
     return Math.abs(Number(entry.rp || 600) - playerRp) <= range;
@@ -578,6 +715,7 @@ function startBattle(room) {
   room.startedAt = null;
   room.leaderboardRecorded = false;
   room.forcedWinnerIdx = null;
+  room.forfeitedPlayerId = null;
   room.paused = false;
   room.timerFrozen = false;
   room.questionVersion++;
@@ -606,6 +744,9 @@ function startBattle(room) {
     type: 'gameStart',
     you: 0,
     gameMode: room.gameMode,
+    matchType: room.matchType,
+    opponentIsBot: !!players[p2Id].isBot,
+    rotation: room.botRotation && room.botRotation.profileId === players[p1Id].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: p1Cards
@@ -615,6 +756,9 @@ function startBattle(room) {
     type: 'gameStart',
     you: 1,
     gameMode: room.gameMode,
+    matchType: room.matchType,
+    opponentIsBot: !!players[p1Id].isBot,
+    rotation: room.botRotation && room.botRotation.profileId === players[p2Id].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: p2Cards
@@ -990,6 +1134,7 @@ function startSprint(room) {
   room.matchId = 'match_' + cryptoRandomId();
   room.startedAt = null;
   room.leaderboardRecorded = false;
+  room.forfeitedPlayerId = null;
   room.forcedWinnerIdx = null;
   room.paused = false;
   room.timerFrozen = false;
@@ -1011,8 +1156,8 @@ function startSprint(room) {
   room.sprintQuestionVersions = [0, 0];
   room.botSprintTimers = [null, null];
 
-  sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
-  sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p2Id].isBot, rotation: room.botRotation && room.botRotation.profileId === players[p1Id].profileId ? publicRotationState(room.botRotation.state) : null, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p1Id].isBot, rotation: room.botRotation && room.botRotation.profileId === players[p2Id].profileId ? publicRotationState(room.botRotation.state) : null, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
 }
 
 function sendSprintQuestion(room, playerIdx) {
@@ -1273,6 +1418,9 @@ function resumeRoomAfterReconnect(room, playerId) {
     type: 'matchResume',
     you: idx,
     gameMode: room.gameMode,
+    matchType: room.matchType,
+    opponentIsBot: !!(players[room.players[1 - idx]] && players[room.players[1 - idx]].isBot),
+    rotation: room.botRotation && room.botRotation.profileId === players[playerId].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: room.gameState.players[idx].cards || [],
@@ -1306,6 +1454,7 @@ function forfeitRankedMatch(playerId, preserveConnection) {
   const room = player && rooms[player.roomCode];
   if (!room || !room.gameState || room.leaderboardRecorded) return handleDisconnect(playerId);
   const loserIdx = player.playerIdx;
+  room.forfeitedPlayerId = playerId;
   room.paused = false;
   room.disconnectedPlayerId = null;
   room.battleActive = true;
@@ -1346,12 +1495,41 @@ function handleSocketDisconnect(playerId, immediateForfeit) {
   handleDisconnect(playerId);
 }
 
+function closeCompletedQuickRoom(room) {
+  if (!room) return;
+  room.players.forEach(function (pid) {
+    if (players[pid] && !players[pid].isBot) {
+      players[pid].roomCode = null;
+      players[pid].playerIdx = 0;
+    }
+  });
+  destroyRoom(room.code);
+}
+
+function startNextQuickMatch(playerId, requestedMode) {
+  const player = players[playerId];
+  if (!player) return;
+  const room = player.roomCode ? rooms[player.roomCode] : null;
+  if (room) {
+    if (room.matchType !== 'quick' || room.battleActive || room.countdownPending || !room.leaderboardRecorded) {
+      sendToPlayer(playerId, { type: 'quickMatchError', error: 'Pertarungan semasa belum selesai.' });
+      return;
+    }
+    closeCompletedQuickRoom(room);
+  }
+  requestQuickMatch(playerId, requestedMode);
+}
+
 function leavePlayerRoom(playerId) {
   const player = players[playerId];
   if (!player) return;
   cancelQuickMatch(playerId, false);
   const room = player.roomCode ? rooms[player.roomCode] : null;
   if (!room) { player.roomCode = null; return; }
+  if (room.matchType === 'quick' && room.leaderboardRecorded && !room.battleActive && !room.countdownPending) {
+    closeCompletedQuickRoom(room);
+    return;
+  }
   if (room.battleActive && isRankedRoom(room)) {
     forfeitRankedMatch(playerId, true);
     return;
@@ -1751,6 +1929,10 @@ wss.on('connection', async function connection(ws, req) {
         cancelQuickMatch(playerId, true);
         break;
 
+      case 'nextQuickMatch':
+        startNextQuickMatch(playerId, message.gameMode);
+        break;
+
       case 'createRoom': {
         cancelQuickMatch(playerId, false);
         const settings = normalizeSettings(message.settings);
@@ -1830,6 +2012,10 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
+        if (room && room.matchType === 'quick') {
+          sendToPlayer(playerId, { type: 'quickMatchError', error: 'Gunakan Next Opponent untuk meneruskan rotasi.' });
+          break;
+        }
         if (room && room.players.length === 2 && !room.battleActive && !room.countdownPending) {
           startBattle(room);
         }

@@ -849,7 +849,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the season leaderboard.</div>
     <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
-    <div class="quick-match-note" id="quick-match-note">Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 6s.</div>
+    <div class="quick-match-note" id="quick-match-note">Cari pemain selama 8 saat. Selepas bertemu pemain, lengkapkan rotasi 10 lawan sebelum bertemu pemain semula. Ranked: All Tables · Random · 6s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -1075,6 +1075,9 @@ var STATE = {
   quickMatchStartedAt: 0,
   quickMatchWaitMs: 8000,
   quickMatchInterval: null,
+  matchType: null,
+  opponentIsBot: false,
+  quickRotation: null,
   learningStats: {},
   leaderboardMode: 'solo',
   leaderboardRequestId: 0,
@@ -1838,6 +1841,9 @@ function startSoloGame() {
   var playerCards = dealCards();
 
   STATE.you = 0;
+  STATE.matchType = 'solo';
+  STATE.opponentIsBot = false;
+  STATE.quickRotation = null;
   STATE.battleActive = true;
   STATE.round = 0;
   STATE.currentPlayer = 0;
@@ -2163,8 +2169,8 @@ function applyModeState(mode) {
   document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
-    ? 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 60s Sprint.'
-    : 'Cari pemain selama 8 saat, kemudian lawan arena akan dipilih. Ranked: All Tables · Random · 6s.';
+    ? 'Cari pemain selama 8 saat. Selepas bertemu pemain, lengkapkan rotasi 10 lawan sebelum bertemu pemain semula. Ranked: All Tables · Random · 60s Sprint.'
+    : 'Cari pemain selama 8 saat. Selepas bertemu pemain, lengkapkan rotasi 10 lawan sebelum bertemu pemain semula. Ranked: All Tables · Random · 6s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -2281,6 +2287,9 @@ function resetRemoteSession() {
   resetQuickMatchUI();
   setInfernoArena(false);
   STATE.roomCode = null;
+  STATE.matchType = null;
+  STATE.opponentIsBot = false;
+  STATE.quickRotation = null;
   STATE.battleActive = false;
   STATE.isSprint = false;
   STATE.round = 0;
@@ -2321,7 +2330,7 @@ function stopQuickMatchClock() {
   STATE.quickMatchInterval = null;
 }
 
-function beginQuickMatchSearch(waitMs) {
+function beginQuickMatchSearch(waitMs, rotation) {
   stopQuickMatchClock();
   STATE.quickMatchSearching = true;
   STATE.quickMatchWaitMs = Number(waitMs) || 8000;
@@ -2329,24 +2338,30 @@ function beginQuickMatchSearch(waitMs) {
   var card = document.getElementById('connect-card');
   card.classList.remove('waiting');
   card.classList.add('searching');
-  document.getElementById('quick-match-title').textContent = 'Searching for opponent';
+  STATE.quickRotation = rotation || null;
+  document.getElementById('quick-match-title').textContent = rotation && rotation.active
+    ? 'Opponent Rotation ' + rotation.position + '/' + rotation.total
+    : 'Searching for opponent';
   document.getElementById('btn-cancel-quick-match').disabled = false;
   setModeControlsLocked(true);
 
   function updateSearchTime() {
     var remaining = Math.max(0, STATE.quickMatchWaitMs - (Date.now() - STATE.quickMatchStartedAt));
-    document.getElementById('quick-match-countdown').textContent = remaining > 0
-      ? 'Mencari pemain tersedia... ' + Math.ceil(remaining / 1000) + 's'
-      : 'Menyediakan lawan arena...';
+    document.getElementById('quick-match-countdown').textContent = rotation && rotation.active
+      ? 'Menyediakan lawan ' + rotation.position + ' daripada ' + rotation.total + '...'
+      : (remaining > 0 ? 'Mencari pemain tersedia... ' + Math.ceil(remaining / 1000) + 's' : 'Menyediakan lawan arena...');
   }
   updateSearchTime();
   STATE.quickMatchInterval = setInterval(updateSearchTime, 100);
 }
 
-function showQuickMatchFound(opponentName) {
+function showQuickMatchFound(opponentName, rotation) {
   stopQuickMatchClock();
   STATE.quickMatchSearching = false;
-  document.getElementById('quick-match-title').textContent = 'Opponent found!';
+  STATE.quickRotation = rotation || STATE.quickRotation;
+  document.getElementById('quick-match-title').textContent = rotation && rotation.active
+    ? 'Opponent Rotation ' + rotation.position + '/' + rotation.total
+    : 'Opponent found!';
   document.getElementById('quick-match-countdown').textContent = opponentName + ' bersedia. Pertarungan akan bermula...';
   document.getElementById('btn-cancel-quick-match').disabled = true;
 }
@@ -2354,6 +2369,7 @@ function showQuickMatchFound(opponentName) {
 function resetQuickMatchUI() {
   stopQuickMatchClock();
   STATE.quickMatchSearching = false;
+  STATE.quickRotation = null;
   document.getElementById('connect-card').classList.remove('searching');
   document.getElementById('quick-match-title').textContent = 'Searching for opponent';
   document.getElementById('quick-match-countdown').textContent = 'Looking for an available player...';
@@ -2392,7 +2408,7 @@ function handleMessage(msg) {
       applyAuthoritativeRoomState({ gameMode: msg.gameMode, settings: msg.settings });
       STATE.roomCode = 'QUICK';
       document.getElementById('hdr-room').textContent = 'Quick';
-      beginQuickMatchSearch(msg.waitMs);
+      beginQuickMatchSearch(msg.waitMs, msg.rotation);
       break;
 
     case 'quickMatchFound':
@@ -2400,7 +2416,7 @@ function handleMessage(msg) {
       STATE.you = msg.you;
       STATE.roomCode = 'QUICK';
       document.getElementById('hdr-room').textContent = 'Quick';
-      showQuickMatchFound(msg.opponentName);
+      showQuickMatchFound(msg.opponentName, msg.rotation);
       break;
 
     case 'quickMatchCancelled':
@@ -2448,6 +2464,9 @@ function handleMessage(msg) {
     case 'gameStart':
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
+      STATE.matchType = msg.matchType || 'room';
+      STATE.opponentIsBot = !!msg.opponentIsBot;
+      STATE.quickRotation = msg.rotation || null;
       STATE.you = msg.you;
       STATE.players = msg.players;
       STATE.yourCards = msg.yourCards;
@@ -2474,6 +2493,7 @@ function handleMessage(msg) {
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.you = msg.you; STATE.players = msg.players; STATE.yourCards = msg.yourCards || [];
+      STATE.matchType = msg.matchType || 'room'; STATE.opponentIsBot = !!msg.opponentIsBot; STATE.quickRotation = msg.rotation || null;
       STATE.battleActive = true; STATE.isSprint = msg.gameMode === 'sprint'; STATE.round = msg.round || 0; STATE.currentPlayer = msg.currentPlayer;
       document.getElementById('disconnect-overlay').classList.remove('show');
       setInfernoArena(true);
@@ -2705,6 +2725,7 @@ function handleMessage(msg) {
         msg.ranked ? 'Ranked result is being saved...' : 'Unranked - custom settings do not affect the leaderboard.',
         msg.ranked ? '' : 'error'
       );
+      document.getElementById('winner-rematch').textContent = STATE.matchType === 'quick' ? 'Next Opponent' : 'Rematch';
       document.getElementById('winner-overlay').classList.add('show');
       document.getElementById('answer-input').disabled = true;
       document.getElementById('btn-attack').disabled = true;
@@ -2727,6 +2748,17 @@ function handleMessage(msg) {
       if (msg.tier) rankText += ' · ' + msg.tier + (msg.division ? ' ' + msg.division : '');
       setWinnerRankedStatus(rankText, msg.delta >= 0 ? 'success' : 'error');
       loadHomeRanks();
+      break;
+
+    case 'botRotationProgress':
+      STATE.quickRotation = msg;
+      if (msg.incomplete) {
+        setWinnerRankedStatus('Opponent Rotation ' + msg.position + '/' + msg.total + ' belum selesai. Lawan ini akan diulang.', 'error');
+      } else if (msg.active) {
+        setWinnerRankedStatus('Opponent Rotation: ' + msg.completed + '/' + msg.total + ' selesai. Tekan Next Opponent.', 'success');
+      } else {
+        setWinnerRankedStatus('Semua ' + msg.total + ' lawan selesai. Anda kini boleh bertemu pemain sebenar semula.', 'success');
+      }
       break;
 
     case 'opponentLeft':
@@ -2949,6 +2981,24 @@ function startCountdown(callback) {
 }
 
 /* ==================== GO HOME ==================== */
+function continueQuickMatchRotation() {
+  resetQuickMatchUI();
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('game-layout').classList.remove('show');
+  document.getElementById('connect-screen').style.display = '';
+  document.getElementById('connect-screen').classList.add('show');
+  document.getElementById('landing-screen').classList.add('hide');
+  document.getElementById('header-subtitle').classList.remove('hide');
+  document.getElementById('header-info').classList.add('show');
+  document.getElementById('btn-exit').classList.remove('show');
+  document.getElementById('sprint-timer').classList.remove('show', 'warning');
+  setInfernoArena(false);
+  STATE.battleActive = false;
+  STATE.roomCode = 'QUICK';
+  setWinnerRankedStatus('', '');
+  send({ type: 'nextQuickMatch', gameMode: STATE.gameMode });
+}
+
 function setInfernoArena(active) {
   document.body.classList.toggle('arena-inferno', !!active);
   document.getElementById('bg-layer').style.display = active ? 'none' : '';
@@ -2966,6 +3016,9 @@ function goHome() {
   STATE.round = 0;
   STATE.currentQuestion = null;
   STATE.players = [];
+  STATE.matchType = null;
+  STATE.opponentIsBot = false;
+  STATE.quickRotation = null;
   document.getElementById('game-layout').classList.remove('show');
   document.getElementById('connect-screen').classList.remove('show');
   document.getElementById('landing-screen').classList.remove('hide');
@@ -3472,6 +3525,10 @@ function initEventListeners() {
   // Winner buttons
   document.getElementById('winner-rematch').addEventListener('click', function () {
     Sound.click();
+    if (STATE.matchType === 'quick') {
+      continueQuickMatchRotation();
+      return;
+    }
     document.getElementById('winner-overlay').classList.remove('show');
     setWinnerRankedStatus('', '');
     if (STATE.gameMode === 'solo') {

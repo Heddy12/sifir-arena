@@ -43,7 +43,7 @@ async function run() {
   process.env.DATABASE_URL = 'postgresql://quick-match-test';
   process.env.PGSSL_DISABLE = '1';
   process.env.NODE_ENV = 'test';
-  process.env.QUICK_MATCH_WAIT_MS = '60';
+  process.env.QUICK_MATCH_WAIT_MS = '250';
   process.env.QUICK_MATCH_START_DELAY_MS = '30';
   process.env.RANKED_RECONNECT_GRACE_MS = '1000';
 
@@ -110,9 +110,29 @@ async function run() {
     const resumeState = await resumed;
     assert.strictEqual(resumeState.players.length, 2);
     assert.strictEqual(resumeState.settings.timer, 6);
+    assert.strictEqual(resumeState.matchType, 'quick');
     sockets.push(reconnectedA);
+    const rotationStarted = waitForMessage(reconnectedA, 'botRotationProgress');
     reconnectedA.send(JSON.stringify({ type: 'leaveRoom' }));
+    const rotationState = await rotationStarted;
+    assert.strictEqual(rotationState.active, true);
+    assert.strictEqual(rotationState.completed, 0);
+    assert.strictEqual(rotationState.total, botCatalog.BOT_PROFILES.length);
     playerB.close();
+
+    const rotationSearching = waitForMessage(reconnectedA, 'quickMatchSearching');
+    const rotationFound = waitForMessage(reconnectedA, 'quickMatchFound');
+    const rotationStart = waitForMessage(reconnectedA, 'gameStart');
+    reconnectedA.send(JSON.stringify({ type: 'quickMatch', gameMode: 'ffa' }));
+    const forcedSearch = await rotationSearching;
+    assert.strictEqual(forcedSearch.rotation.position, 1);
+    const forcedMatch = await rotationFound;
+    assert.strictEqual(forcedMatch.opponentName, botCatalog.BOT_PROFILES[0].name);
+    const forcedGame = await rotationStart;
+    assert.strictEqual(forcedGame.matchType, 'quick');
+    assert.strictEqual(forcedGame.opponentIsBot, true);
+    assert.strictEqual(forcedGame.rotation.position, 1);
+    reconnectedA.close();
 
     const cookieC = await register(base, 'Charlie');
     const playerC = await openSocket(base, cookieC);
@@ -128,6 +148,8 @@ async function run() {
     const botGame = await botStart;
     assert.strictEqual(botGame.players[1].name, botMatch.opponentName);
     assert.strictEqual(botGame.gameMode, 'ffa');
+    assert.strictEqual(botGame.matchType, 'quick');
+    assert.strictEqual(botGame.opponentIsBot, true);
     const botTurn = waitForMessage(playerC, 'newTurn');
     playerC.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await botTurn).timer, 6);

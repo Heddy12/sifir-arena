@@ -88,6 +88,27 @@ async function run() {
   const seededBotLeaderboard = seededMultiplayerRows.find(function (row) { return row.name === seededBot.name; });
   assert.ok(seededBotLeaderboard && seededBotLeaderboard.gamesPlayed > 0);
 
+  await store.beginBotRotation(registered.account.accountId, 'multiplayer');
+  let rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
+  assert.strictEqual(rotation.active, true);
+  assert.strictEqual(rotation.position, 1);
+  assert.strictEqual(rotation.bot.profileId, botCatalog.BOT_PROFILES[0].profileId);
+  const repeatedClaim = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
+  assert.strictEqual(repeatedClaim.bot.profileId, rotation.bot.profileId, 'unfinished bot must repeat');
+  let rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', botCatalog.BOT_PROFILES[1].profileId);
+  assert.strictEqual(rotationProgress.advanced, false, 'wrong bot cannot skip rotation');
+  for (let botIndex = 0; botIndex < botCatalog.BOT_PROFILES.length; botIndex++) {
+    rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
+    assert.strictEqual(rotation.bot.profileId, botCatalog.BOT_PROFILES[botIndex].profileId);
+    rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', rotation.bot.profileId);
+    assert.strictEqual(rotationProgress.advanced, true);
+  }
+  rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
+  assert.strictEqual(rotation.active, false);
+  assert.strictEqual(rotation.completed, botCatalog.BOT_PROFILES.length);
+  const independentSprintRotation = await store.claimBotRotation(registered.account.accountId, 'sprint');
+  assert.strictEqual(independentSprintRotation.active, false, 'Sprint rotation must be separate');
+
   const rankedMatch = await store.recordCompletedMatch({
     matchId: 'match_profile_test_001', mode: 'multiplayer', matchType: 'quick', ranked: true,
     settings: { timer: 6, sifir: 0, difficulty: 'random' }, durationSeconds: 45,

@@ -245,6 +245,17 @@ async function ensureSchema() {
 
       CREATE INDEX IF NOT EXISTS player_rank_ladder_idx ON player_rank_stats(season_id, mode, rp DESC);
 
+      CREATE TABLE IF NOT EXISTS player_bot_rotation (
+        profile_id VARCHAR(80) NOT NULL REFERENCES leaderboard_profiles(profile_id) ON DELETE CASCADE,
+        mode VARCHAR(16) NOT NULL CHECK (mode IN ('multiplayer', 'sprint')),
+        active BOOLEAN NOT NULL DEFAULT FALSE,
+        next_bot_index INTEGER NOT NULL DEFAULT 0 CHECK (next_bot_index BETWEEN 0 AND 10),
+        pending_bot_profile_id VARCHAR(80),
+        cycle_number INTEGER NOT NULL DEFAULT 0 CHECK (cycle_number >= 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (profile_id, mode)
+      );
+
       CREATE TABLE IF NOT EXISTS player_match_history (
         match_id VARCHAR(80) NOT NULL,
         profile_id VARCHAR(80) NOT NULL REFERENCES leaderboard_profiles(profile_id) ON DELETE CASCADE,
@@ -899,6 +910,137 @@ async function getRankSnapshot(profileId, mode) {
   }
 }
 
+function normalizeRotationMode(mode) {
+  return mode === 'sprint' ? 'sprint' : (mode === 'multiplayer' ? 'multiplayer' : null);
+}
+
+function rotationState(row) {
+  const index = row ? Math.max(0, Math.min(botCatalog.BOT_PROFILES.length, Number(row.next_bot_index) || 0)) : 0;
+  const active = !!(row && row.active && index < botCatalog.BOT_PROFILES.length);
+  const pending = active && row.pending_bot_profile_id
+    ? botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; })
+    : null;
+  const bot = active ? (pending || botCatalog.BOT_PROFILES[index]) : null;
+  return {
+    active: active,
+    completed: active ? index : (row && Number(row.next_bot_index) >= botCatalog.BOT_PROFILES.length ? botCatalog.BOT_PROFILES.length : 0),
+    total: botCatalog.BOT_PROFILES.length,
+    position: active ? index + 1 : null,
+    botIndex: active ? index : null,
+    bot: bot ? { profileId: bot.profileId, name: bot.name, level: bot.level } : null,
+    cycleNumber: Number(row && row.cycle_number) || 0
+  };
+}
+
+async function beginBotRotation(profileIds, mode) {
+  const normalizedMode = normalizeRotationMode(mode);
+  const ids = Array.from(new Set((Array.isArray(profileIds) ? profileIds : [profileIds]).map(normalizeProfileId).filter(Boolean)));
+  if (!normalizedMode || ids.length === 0) throw new Error('Invalid bot rotation request');
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    for (const profileId of ids) {
+      await client.query(
+        `INSERT INTO player_bot_rotation
+          (profile_id, mode, active, next_bot_index, pending_bot_profile_id, cycle_number, updated_at)
+         VALUES ($1,$2,TRUE,0,NULL,1,NOW())
+         ON CONFLICT (profile_id, mode) DO UPDATE SET
+           active = TRUE, next_bot_index = 0, pending_bot_profile_id = NULL,
+           cycle_number = player_bot_rotation.cycle_number + 1, updated_at = NOW()`,
+        [profileId, normalizedMode]
+      );
+    }
+    await client.query('COMMIT');
+    return { active: true, completed: 0, total: botCatalog.BOT_PROFILES.length };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function claimBotRotation(profileId, mode) {
+  const id = normalizeProfileId(profileId);
+  const normalizedMode = normalizeRotationMode(mode);
+  if (!id || !normalizedMode) return rotationState(null);
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'SELECT * FROM player_bot_rotation WHERE profile_id = $1 AND mode = $2 FOR UPDATE',
+      [id, normalizedMode]
+    );
+    const row = result.rows[0];
+    if (!row || !row.active || Number(row.next_bot_index) >= botCatalog.BOT_PROFILES.length) {
+      if (row && row.active) {
+        await client.query(
+          'UPDATE player_bot_rotation SET active = FALSE, next_bot_index = $3, pending_bot_profile_id = NULL, updated_at = NOW() WHERE profile_id = $1 AND mode = $2',
+          [id, normalizedMode, botCatalog.BOT_PROFILES.length]
+        );
+      }
+      await client.query('COMMIT');
+      return rotationState(row && Object.assign({}, row, { active: false, next_bot_index: botCatalog.BOT_PROFILES.length }));
+    }
+    const index = Number(row.next_bot_index);
+    const expectedBot = botCatalog.BOT_PROFILES[index];
+    let pendingBot = botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; });
+    if (!pendingBot || pendingBot.profileId !== expectedBot.profileId) {
+      pendingBot = expectedBot;
+      await client.query(
+        'UPDATE player_bot_rotation SET pending_bot_profile_id = $3, updated_at = NOW() WHERE profile_id = $1 AND mode = $2',
+        [id, normalizedMode, pendingBot.profileId]
+      );
+      row.pending_bot_profile_id = pendingBot.profileId;
+    }
+    await client.query('COMMIT');
+    return rotationState(row);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function completeBotRotation(profileId, mode, botProfileId) {
+  const id = normalizeProfileId(profileId);
+  const normalizedMode = normalizeRotationMode(mode);
+  const completedBotId = normalizeProfileId(botProfileId);
+  if (!id || !normalizedMode || !completedBotId) return Object.assign(rotationState(null), { advanced: false });
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'SELECT * FROM player_bot_rotation WHERE profile_id = $1 AND mode = $2 FOR UPDATE',
+      [id, normalizedMode]
+    );
+    const row = result.rows[0];
+    if (!row || !row.active || row.pending_bot_profile_id !== completedBotId) {
+      await client.query('COMMIT');
+      return Object.assign(rotationState(row), { advanced: false });
+    }
+    const nextIndex = Math.min(botCatalog.BOT_PROFILES.length, Number(row.next_bot_index) + 1);
+    const active = nextIndex < botCatalog.BOT_PROFILES.length;
+    const updated = await client.query(
+      `UPDATE player_bot_rotation SET active = $3, next_bot_index = $4,
+         pending_bot_profile_id = NULL, updated_at = NOW()
+       WHERE profile_id = $1 AND mode = $2 RETURNING *`,
+      [id, normalizedMode, active, nextIndex]
+    );
+    await client.query('COMMIT');
+    return Object.assign(rotationState(updated.rows[0]), { advanced: true });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
 async function updateProfile(profileId, input) {
   const id = normalizeProfileId(profileId);
   if (!id) throw authError('PROFILE_NOT_FOUND', 'Profile tidak ditemui.');
@@ -1245,6 +1387,9 @@ module.exports = {
   getLeaderboard,
   getRankedLadder,
   getRankSnapshot,
+  beginBotRotation,
+  claimBotRotation,
+  completeBotRotation,
   getPlayerProfile,
   updateProfile,
   recordCompletedMatch,
