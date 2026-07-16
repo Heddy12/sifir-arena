@@ -1226,11 +1226,37 @@ async function awardBadges(client, profileId, event) {
   if (Number(detail.rows[0] && detail.rows[0].best_win_streak) >= 5) badges.push('hot-streak');
   if (event.accuracy === 100 && event.correct >= 5) badges.push('perfect-battle');
   if (event.mode === 'sprint' && event.correct >= 15) badges.push('sprint-star');
+  if (event.mode === 'sprint' && event.correct >= 30) badges.push('sprint-legend');
+  if (Number(detail.rows[0] && detail.rows[0].best_win_streak) >= 20) badges.push('streak-legend');
+
+  const multiplayer = await client.query(
+    "SELECT wins FROM player_mode_stats WHERE profile_id = $1 AND mode = 'multiplayer'",
+    [profileId]
+  );
+  if (Number(multiplayer.rows[0] && multiplayer.rows[0].wins) >= 25) badges.push('arena-champion');
+
+  const cardUses = await client.query(
+    'SELECT COALESCE(SUM(uses), 0) AS uses FROM player_card_stats WHERE profile_id = $1',
+    [profileId]
+  );
+  if (Number(cardUses.rows[0].uses) >= 50) badges.push('card-master');
+
   const tables = await client.query('SELECT correct, wrong FROM player_table_stats WHERE profile_id = $1', [profileId]);
+  if (tables.rows.some(function (row) {
+    const correct = Number(row.correct), attempts = correct + Number(row.wrong);
+    return attempts >= 25 && correct * 100 / attempts >= 90;
+  })) badges.push('table-specialist');
   if (tables.rows.length === 12 && tables.rows.every(function (row) {
     const correct = Number(row.correct), attempts = correct + Number(row.wrong);
     return attempts >= 10 && correct * 100 / attempts >= 80;
   })) badges.push('times-master');
+
+  const defeatedBots = await client.query(
+    "SELECT DISTINCT opponent_name FROM player_match_history WHERE profile_id = $1 AND result = 'win' AND opponent_name = ANY($2::text[])",
+    [profileId, botCatalog.BOT_PROFILES.map(function (bot) { return bot.name; })]
+  );
+  if (defeatedBots.rows.length === botCatalog.BOT_PROFILES.length) badges.push('bot-breaker');
+  if (event.ranked && Number(event.rankAfter) >= 300) badges.push('rank-climber');
   for (const badge of badges) {
     await client.query('INSERT INTO player_badges (profile_id, badge_key) VALUES ($1, $2) ON CONFLICT DO NOTHING', [profileId, badge]);
   }
@@ -1357,7 +1383,10 @@ async function recordCompletedMatch(input) {
           participant.score, participant.correct, participant.wrong, participant.accuracy, duration, xpAwarded,
           ranked ? before : null, ranked ? delta : null, ranked ? after : null, settingsJson]
       );
-      await awardBadges(client, participant.profileId, { mode: mode, correct: participant.correct, accuracy: participant.accuracy });
+      await awardBadges(client, participant.profileId, {
+        mode: mode, correct: participant.correct, accuracy: participant.accuracy,
+        ranked: ranked, rankAfter: after
+      });
       const oldHistory = await client.query('SELECT match_id FROM player_match_history WHERE profile_id = $1 ORDER BY played_at DESC OFFSET 50', [participant.profileId]);
       for (const old of oldHistory.rows) await client.query('DELETE FROM player_match_history WHERE profile_id = $1 AND match_id = $2', [participant.profileId, old.match_id]);
       const position = ranked ? await rankPosition(client, season.season_id, mode, participant.profileId, after) : null;

@@ -1414,7 +1414,21 @@ function renderRankedLadder(mode, body) {
 }
 
 var PROFILE_AVATARS = { 'hero-blue':'&#9876;', 'hero-fire':'&#128293;', 'hero-shadow':'&#127917;', 'hero-gold':'&#128081;', 'mage-cyan':'&#10024;', 'knight-red':'&#128737;', 'star-green':'&#11088;', 'crown-purple':'&#128142;' };
-var BADGE_NAMES = { 'first-victory':'First Victory', 'ten-wins':'10 Wins', 'fifty-wins':'50 Wins', 'hundred-battles':'100 Battles', 'hot-streak':'Hot Streak', 'perfect-battle':'Perfect Match', 'sprint-star':'Sprint Star', 'times-master':'Times Master' };
+var BADGE_NAMES = {
+  'first-victory':'First Victory', 'ten-wins':'10 Wins', 'fifty-wins':'50 Wins', 'hundred-battles':'100 Battles',
+  'hot-streak':'Hot Streak', 'perfect-battle':'Perfect Match', 'sprint-star':'Sprint Star', 'times-master':'Times Master',
+  'arena-champion':'Arena Champion', 'streak-legend':'Streak Legend', 'sprint-legend':'Sprint Legend',
+  'card-master':'Card Master', 'table-specialist':'Table Specialist', 'bot-breaker':'Bot Breaker', 'rank-climber':'Rank Climber'
+};
+var BADGE_INFO = {
+  'first-victory':'Win your first battle.', 'ten-wins':'Win 10 battles.', 'fifty-wins':'Win 50 battles.', 'hundred-battles':'Complete 100 battles.',
+  'hot-streak':'Reach a 5-win streak.', 'perfect-battle':'Get 100% accuracy with at least 5 correct answers.',
+  'sprint-star':'Get 15 correct answers in one Sprint.', 'times-master':'Score at least 80% across all 12 tables.',
+  'arena-champion':'Win 25 Multiplayer battles.', 'streak-legend':'Reach a 20-win streak.',
+  'sprint-legend':'Get 30 correct answers in one Sprint.', 'card-master':'Use Magic Cards 50 times.',
+  'table-specialist':'Score at least 90% over 25 answers on one table.', 'bot-breaker':'Defeat all 10 arena opponents.',
+  'rank-climber':'Reach Times Apprentice rank or above.'
+};
 
 function closeProfile() { document.getElementById('profile-overlay').classList.remove('show'); }
 function openProfile(playerName) {
@@ -1449,7 +1463,7 @@ function renderProfile() {
   if (STATE.profileTab === 'overview') {
     html = '<div class="profile-grid">' + profileCard('Battles',p.overview.totalGames) + profileCard('Victories',p.overview.totalWins) + profileCard('Win Rate',p.overview.winRate+'%') + profileCard('Accuracy',p.overview.accuracy+'%') + profileCard('Best Streak',p.overview.bestWinStreak) + profileCard('Season','Season '+p.season.number) + '</div>';
     html += '<div class="profile-grid" style="margin-top:9px">'; ['solo','multiplayer','sprint'].forEach(function(mode){var r=p.ranks[mode];html+=profileCard(modeTitle(mode),r.tier+(r.division?' '+r.division:'')+' · '+r.rp+' RP','profile-rank');}); html += '</div>';
-    html += '<div class="profile-badges" style="margin-top:12px">' + (p.badges.length ? p.badges.map(function(b){return '<span class="profile-badge">'+escapeHtml(BADGE_NAMES[b.key]||b.key)+'</span>';}).join('') : '<span class="profile-state">No badges yet</span>') + '</div>';
+    html += '<div class="profile-badges" style="margin-top:12px">' + (p.badges.length ? p.badges.map(function(b){return '<span class="profile-badge" title="'+escapeHtml(BADGE_INFO[b.key]||'Achievement unlocked.')+'">'+escapeHtml(BADGE_NAMES[b.key]||b.key)+'</span>';}).join('') : '<span class="profile-state">No badges yet</span>') + '</div>';
   } else if (STATE.profileTab === 'battlefield') {
     html = '<div class="profile-grid">'; ['solo','multiplayer','sprint'].forEach(function(mode){var m=p.modes[mode]; html += profileCard(modeTitle(mode),m.wins+'W / '+m.losses+'L · '+m.winRate+'%');}); html += profileCard('Recent Form',(p.recentForm||[]).map(function(x){return x==='win'?'W':'L';}).join(' ')||'-') + profileCard('Strongest Table',p.strongestTable?'Table '+p.strongestTable.table+' · '+p.strongestTable.accuracy+'%':'-') + profileCard('Weakest Table',p.weakestTable?'Table '+p.weakestTable.table+' · '+p.weakestTable.accuracy+'%':'-') + '</div>';
   } else if (STATE.profileTab === 'statistics') {
