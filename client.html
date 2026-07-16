@@ -188,11 +188,12 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .log-entry .log-time{color:var(--text-dim);font-size:0.65rem;}
 
 /* SOUND TOGGLE & INFO */
-.sound-toggle{position:fixed;top:12px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;z-index:700;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.sound-toggle,.music-toggle{position:fixed;top:12px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;z-index:700;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
 .sound-toggle{right:12px;color:var(--neon-cyan);font-size:1.08rem;font-weight:bold;box-shadow:var(--glow-cyan);}
-.sound-toggle:hover{transform:scale(1.1);}
-.sound-toggle.muted{color:var(--text-dim);box-shadow:none;}
-.info-toggle{position:fixed;top:12px;right:62px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-yellow);font-size:1.3rem;font-weight:bold;cursor:pointer;z-index:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:var(--glow-yellow);}
+.music-toggle{right:62px;color:var(--neon-purple);font-size:1.08rem;box-shadow:0 0 14px rgba(160,32,240,0.5);}
+.sound-toggle:hover,.music-toggle:hover{transform:scale(1.1);}
+.sound-toggle.muted,.music-toggle.muted{color:var(--text-dim);box-shadow:none;}
+.info-toggle{position:fixed;top:12px;right:112px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-yellow);font-size:1.3rem;font-weight:bold;cursor:pointer;z-index:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:var(--glow-yellow);}
 .info-toggle:hover{transform:scale(1.1);}
 
 /* INFO OVERLAY */
@@ -492,9 +493,10 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
   #landing-leaderboard{width:min(230px,78vw);margin-top:2px;padding:10px 14px;}
   .landing-footer{position:static;margin-top:auto;padding-top:10px;}
   #warriors-bg{display:none!important;}
-  .sound-toggle,.info-toggle{top:10px;width:38px;height:38px;}
+  .sound-toggle,.music-toggle,.info-toggle{top:10px;width:38px;height:38px;}
   .sound-toggle{right:10px;}
-  .info-toggle{right:56px;}
+  .music-toggle{right:56px;}
+  .info-toggle{right:102px;}
 }
 
 @media(max-width:360px){
@@ -625,6 +627,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 </head>
 <body class="auth-pending">
 <button class="sound-toggle" id="sound-toggle" title="Sound effects on" aria-label="Sound effects on" aria-pressed="true">&#128266;</button>
+<button class="music-toggle" id="music-toggle" title="Menu music on" aria-label="Menu music on" aria-pressed="true">&#127925;</button>
 <button class="info-toggle" id="info-toggle" title="Magic Cards Info">?</button>
 
 <header>
@@ -1117,10 +1120,14 @@ function setAuthenticatedAccount(account) {
   document.getElementById('player-name').value = playerName;
   document.getElementById('account-player-name').textContent = account ? account.playerName : '-';
   document.body.classList.remove('auth-pending', 'auth-required');
-  if (account) loadHomeRanks();
+  if (account) {
+    loadHomeRanks();
+    if (!STATE.battleActive) Sound.playMenuMusic();
+  }
 }
 
 function requireAuthentication(message) {
+  Sound.playMenuMusic();
   STATE.account = null;
   STATE.profileId = null;
   if (STATE.reconnectTimer) {
@@ -1478,15 +1485,21 @@ var Sound = {
   ctx: null,
   sfxGain: null,
   sfxEnabled: true,
+  music: null,
+  musicEnabled: true,
+  musicWanted: false,
   loadPreferences: function () {
     try {
       var savedSfx = localStorage.getItem('sifirSfxEnabled');
+      var savedMusic = localStorage.getItem('sifirMusicEnabled');
       if (savedSfx === '0' || savedSfx === '1') this.sfxEnabled = savedSfx === '1';
+      if (savedMusic === '0' || savedMusic === '1') this.musicEnabled = savedMusic === '1';
     } catch (e) {}
   },
   savePreferences: function () {
     try {
       localStorage.setItem('sifirSfxEnabled', this.sfxEnabled ? '1' : '0');
+      localStorage.setItem('sifirMusicEnabled', this.musicEnabled ? '1' : '0');
     } catch (e) {}
   },
   init: function () {
@@ -1510,6 +1523,39 @@ var Sound = {
       } catch (e) {}
     }
     return true;
+  },
+  initMusic: function () {
+    if (this.music) return true;
+    try {
+      var AudioPlayer = window.Audio;
+      if (!AudioPlayer) return false;
+      this.music = new AudioPlayer('/audio/menu-go.mp3');
+      this.music.loop = true;
+      this.music.preload = 'auto';
+      this.music.volume = 0.2;
+      this.music.setAttribute('playsinline', '');
+      return true;
+    } catch (e) {
+      this.music = null;
+      return false;
+    }
+  },
+  playMenuMusic: function () {
+    this.musicWanted = true;
+    if (!this.musicEnabled || document.hidden || !this.initMusic()) return;
+    try {
+      var playback = this.music.play();
+      if (playback && typeof playback.catch === 'function') playback.catch(function () {});
+    } catch (e) {}
+  },
+  stopMusicForBattle: function () {
+    this.musicWanted = false;
+    if (!this.music) return;
+    try { this.music.pause(); this.music.currentTime = 0; } catch (e) {}
+  },
+  pauseMusic: function () {
+    if (!this.music) return;
+    try { this.music.pause(); } catch (e) {}
   },
   tone: function (f, d, t, v, st) { if (!this.sfxEnabled || !this.ctx || !this.sfxGain) return; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sine'; var tm = st || this.ctx.currentTime; o.frequency.setValueAtTime(f, tm); g.gain.setValueAtTime(0, tm); g.gain.linearRampToValueAtTime(v || 0.15, tm + 0.01); g.gain.exponentialRampToValueAtTime(0.001, tm + d); o.connect(g); g.connect(this.sfxGain); o.start(tm); o.stop(tm + d); },
   sweep: function (f1, f2, d, t, v) { if (!this.sfxEnabled || !this.ctx || !this.sfxGain) return; var n = this.ctx.currentTime; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sawtooth'; o.frequency.setValueAtTime(f1, n); o.frequency.exponentialRampToValueAtTime(f2, n + d); g.gain.setValueAtTime(0, n); g.gain.linearRampToValueAtTime(v || 0.12, n + 0.01); g.gain.exponentialRampToValueAtTime(0.001, n + d); o.connect(g); g.connect(this.sfxGain); o.start(n); o.stop(n + d); },
@@ -1535,6 +1581,13 @@ var Sound = {
     this.sfxEnabled = !this.sfxEnabled;
     this.savePreferences();
     return this.sfxEnabled;
+  },
+  toggleMusic: function () {
+    this.musicEnabled = !this.musicEnabled;
+    this.savePreferences();
+    if (this.musicEnabled && this.musicWanted) this.playMenuMusic();
+    else if (!this.musicEnabled) this.pauseMusic();
+    return this.musicEnabled;
   }
 };
 
@@ -1547,10 +1600,19 @@ function updateAudioButtons() {
     sfxButton.setAttribute('aria-label', Sound.sfxEnabled ? 'Sound effects on' : 'Sound effects off');
     sfxButton.title = Sound.sfxEnabled ? 'Sound effects on' : 'Sound effects off';
   }
+  var musicButton = document.getElementById('music-toggle');
+  if (musicButton) {
+    musicButton.textContent = Sound.musicEnabled ? '\uD83C\uDFB5' : '\uD83C\uDFB5\u00D7';
+    musicButton.classList.toggle('muted', !Sound.musicEnabled);
+    musicButton.setAttribute('aria-pressed', Sound.musicEnabled ? 'true' : 'false');
+    musicButton.setAttribute('aria-label', Sound.musicEnabled ? 'Menu music on' : 'Menu music off');
+    musicButton.title = Sound.musicEnabled ? 'Menu music on' : 'Menu music off';
+  }
 }
 
 function unlockAudio() {
   Sound.init();
+  if (!STATE.battleActive) Sound.playMenuMusic();
 }
 
 /* ==================== BACKGROUND EFFECTS ==================== */
@@ -1837,6 +1899,7 @@ function renderWeakTableReport(report) {
 
 /* ==================== SINGLE PLAYER MODE (SOLO QUEST) ==================== */
 function startSoloGame() {
+  Sound.stopMusicForBattle();
   var settings = STATE.settings;
   var playerCards = dealCards();
 
@@ -2286,6 +2349,7 @@ function resetRemoteSession() {
   stopTimerDisplay();
   resetQuickMatchUI();
   setInfernoArena(false);
+  Sound.playMenuMusic();
   STATE.roomCode = null;
   STATE.matchType = null;
   STATE.opponentIsBot = false;
@@ -2462,6 +2526,7 @@ function handleMessage(msg) {
       break;
 
     case 'gameStart':
+      Sound.stopMusicForBattle();
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.matchType = msg.matchType || 'room';
@@ -2490,6 +2555,7 @@ function handleMessage(msg) {
       break;
 
     case 'matchResume':
+      Sound.stopMusicForBattle();
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.you = msg.you; STATE.players = msg.players; STATE.yourCards = msg.yourCards || [];
@@ -2836,6 +2902,7 @@ function fallbackCopyRoomCode(code, onSuccess) {
 }
 
 function showVSScreen(opponentName) {
+  Sound.stopMusicForBattle();
   var myName = document.getElementById('player-name').value.trim() || 'Player';
   // Update fighter cards
   document.getElementById('name-left').textContent = STATE.you === 0 ? myName : opponentName;
@@ -2845,6 +2912,7 @@ function showVSScreen(opponentName) {
 }
 
 function showVSOverlay() {
+  Sound.stopMusicForBattle();
   setInfernoArena(true);
   var p1Name = STATE.players[0].name;
   var p2Name = STATE.players[1].name;
@@ -2982,6 +3050,7 @@ function startCountdown(callback) {
 
 /* ==================== GO HOME ==================== */
 function continueQuickMatchRotation() {
+  Sound.playMenuMusic();
   resetQuickMatchUI();
   document.getElementById('winner-overlay').classList.remove('show');
   document.getElementById('game-layout').classList.remove('show');
@@ -3006,6 +3075,7 @@ function setInfernoArena(active) {
 }
 
 function goHome() {
+  Sound.playMenuMusic();
   if (STATE.quickMatchSearching) send({ type: 'cancelQuickMatch' });
   if (STATE.roomCode && STATE.roomCode !== 'SOLO' && !STATE.quickMatchSearching) send({ type: 'leaveRoom' });
   stopTimerDisplay();
@@ -3343,6 +3413,7 @@ function showCardInfo() {
 
 /* ==================== LANDING PAGE ==================== */
 function showConnectScreen() {
+  Sound.playMenuMusic();
   document.getElementById('header-subtitle').classList.remove('hide');
   document.getElementById('landing-screen').classList.add('hide');
   document.getElementById('connect-screen').classList.add('show');
@@ -3503,6 +3574,12 @@ function initEventListeners() {
     updateAudioButtons();
     if (enabled) Sound.click();
   });
+  // Menu music toggle (music is always stopped during VS, countdown and battle)
+  document.getElementById('music-toggle').addEventListener('click', function () {
+    var enabled = Sound.toggleMusic();
+    updateAudioButtons();
+    if (enabled && !STATE.battleActive) Sound.playMenuMusic();
+  });
   // Info toggle
   document.getElementById('info-toggle').addEventListener('click', function () {
     Sound.init(); Sound.click(); showCardInfo();
@@ -3557,6 +3634,10 @@ function init() {
   Sound.loadPreferences();
   updateAudioButtons();
   document.addEventListener('pointerdown', unlockAudio, { once: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) Sound.pauseMusic();
+    else if (Sound.musicWanted && !STATE.battleActive) Sound.playMenuMusic();
+  });
   document.getElementById('header-subtitle').classList.add('hide');
   initEventListeners();
   initModeToggle();

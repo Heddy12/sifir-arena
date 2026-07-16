@@ -16,7 +16,7 @@ function audioParam(initial) {
 }
 
 function createAudioHarness() {
-  const harness = { oscillators: 0, stopped: 0 };
+  const harness = { oscillators: 0, stopped: 0, mediaPlayers: [] };
   function node() { return { connect: function () {} }; }
   function FakeAudioContext() {
     this.currentTime = 0;
@@ -49,7 +49,21 @@ function createAudioHarness() {
   FakeAudioContext.prototype.createBiquadFilter = function () {
     return { type: '', frequency: { value: 0 }, connect: function () {} };
   };
+  function FakeAudio(src) {
+    this.src = src;
+    this.loop = false;
+    this.preload = '';
+    this.volume = 1;
+    this.currentTime = 0;
+    this.playCount = 0;
+    this.pauseCount = 0;
+    this.setAttribute = function () {};
+    this.play = function () { this.playCount++; return Promise.resolve(); };
+    this.pause = function () { this.pauseCount++; };
+    harness.mediaPlayers.push(this);
+  }
   harness.AudioContext = FakeAudioContext;
+  harness.Audio = FakeAudio;
   return harness;
 }
 
@@ -61,7 +75,7 @@ function loadClientAudio() {
   const audio = createAudioHarness();
   let intervalId = 0;
   const context = {
-    window: { AudioContext: audio.AudioContext },
+    window: { AudioContext: audio.AudioContext, Audio: audio.Audio },
     document: { hidden: false, addEventListener: function () {}, getElementById: function () { return null; } },
     localStorage: {
       getItem: function (key) { return storage.has(key) ? storage.get(key) : null; },
@@ -85,6 +99,9 @@ function loadClientAudio() {
 function run() {
   const loaded = loadClientAudio();
   const Sound = loaded.Sound;
+  const musicPath = path.join(__dirname, 'audio', 'menu-go.mp3');
+  assert.ok(fs.existsSync(musicPath), 'menu music asset should exist');
+  assert.ok(fs.statSync(musicPath).size > 1000000, 'menu music asset should not be empty');
   assert.strictEqual(Sound.init(), true);
 
   const beforeMutedSfx = loaded.audio.oscillators;
@@ -98,9 +115,22 @@ function run() {
   Sound.tone(440, 0.1);
   assert.strictEqual(loaded.audio.oscillators, beforeEnabledSfx + 1);
   assert.strictEqual(loaded.storage.get('sifirSfxEnabled'), '1');
-  assert.strictEqual(typeof Sound.playMusic, 'undefined', 'music engine should be removed');
-  assert.strictEqual(loaded.html.includes('id="music-toggle"'), false, 'music control should not be visible');
-  assert.strictEqual(loaded.html.includes('sifirMusicEnabled'), false, 'music preference should no longer be stored');
+  Sound.playMenuMusic();
+  assert.strictEqual(loaded.audio.mediaPlayers.length, 1, 'menu music should create one reusable audio player');
+  assert.strictEqual(loaded.audio.mediaPlayers[0].src, '/audio/menu-go.mp3');
+  assert.strictEqual(loaded.audio.mediaPlayers[0].volume, 0.2);
+  assert.strictEqual(loaded.audio.mediaPlayers[0].loop, true);
+  assert.strictEqual(loaded.audio.mediaPlayers[0].playCount, 1);
+  const sfxStateBeforeMusicToggle = Sound.sfxEnabled;
+  assert.strictEqual(Sound.toggleMusic(), false);
+  assert.strictEqual(Sound.sfxEnabled, sfxStateBeforeMusicToggle, 'music toggle must not change SFX');
+  assert.strictEqual(loaded.storage.get('sifirMusicEnabled'), '0');
+  assert.strictEqual(Sound.toggleMusic(), true);
+  Sound.stopMusicForBattle();
+  assert.strictEqual(loaded.audio.mediaPlayers[0].pauseCount, 2, 'battle should stop menu music');
+  assert.strictEqual(Sound.musicWanted, false);
+  assert.strictEqual(loaded.html.includes('id="music-toggle"'), true, 'music control should be visible');
+  assert.strictEqual(loaded.html.includes('sifirMusicEnabled'), true, 'music preference should be stored separately');
   assert.ok(loaded.html.includes('&#128266;'), 'SFX control should use a clear speaker icon');
   assert.deepStrictEqual(
     JSON.parse(JSON.stringify(loaded.rankProgressState({ tier: 'Multiply Warrior', rp: 650 }))),
