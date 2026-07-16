@@ -79,7 +79,7 @@ function loadClientAudio() {
   };
   vm.createContext(context);
   vm.runInContext(match[1], context, { filename: 'client.html' });
-  return { Sound: context.Sound, document: context.document, storage: storage, audio: audio };
+  return { Sound: context.Sound, rankProgressState: context.rankProgressState, document: context.document, storage: storage, audio: audio, html: html };
 }
 
 function run() {
@@ -127,6 +127,17 @@ function run() {
   assert.strictEqual(Sound.resultMode, true, 'result music state should survive tab visibility changes');
 
   Sound.haltMusic();
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(loaded.rankProgressState({ provisional: true, placementGames: 3, rp: 600 }))),
+    { percent: 60, detail: 'Placement 3/5' }
+  );
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(loaded.rankProgressState({ provisional: false, tier: 'Math Legend', rp: 1675 }))),
+    { percent: 75, detail: '25 RP to next' }
+  );
+  assert.ok(loaded.html.includes('id="home-rank-grid"'), 'home should include season rank cards');
+  assert.ok(loaded.html.includes("fetch('/api/ranked-ladder?mode='"), 'leaderboard should load seasonal ranks directly');
+  assert.strictEqual(loaded.html.includes('Global Records'), false, 'legacy records toggle should not be visible');
   console.log('client audio tests passed');
 }
 
