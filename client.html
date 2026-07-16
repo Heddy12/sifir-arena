@@ -176,10 +176,12 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .log-entry .log-time{color:var(--text-dim);font-size:0.65rem;}
 
 /* SOUND TOGGLE & INFO */
-.sound-toggle{position:fixed;top:12px;right:12px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-cyan);font-size:1.2rem;cursor:pointer;z-index:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:var(--glow-cyan);}
-.sound-toggle:hover{transform:scale(1.1);}
-.sound-toggle.muted{color:var(--text-dim);box-shadow:none;}
-.info-toggle{position:fixed;top:12px;right:62px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-yellow);font-size:1.3rem;font-weight:bold;cursor:pointer;z-index:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:var(--glow-yellow);}
+.sound-toggle,.music-toggle{position:fixed;top:12px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;z-index:700;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.sound-toggle{right:12px;color:var(--neon-cyan);font-size:0.62rem;font-weight:bold;box-shadow:var(--glow-cyan);}
+.music-toggle{right:62px;color:var(--neon-green);font-size:1.15rem;box-shadow:var(--glow-green);}
+.sound-toggle:hover,.music-toggle:hover{transform:scale(1.1);}
+.sound-toggle.muted,.music-toggle.muted{color:var(--text-dim);box-shadow:none;}
+.info-toggle{position:fixed;top:12px;right:112px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--neon-yellow);font-size:1.3rem;font-weight:bold;cursor:pointer;z-index:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;box-shadow:var(--glow-yellow);}
 .info-toggle:hover{transform:scale(1.1);}
 
 /* INFO OVERLAY */
@@ -381,7 +383,7 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 body.auth-pending .auth-screen,body.auth-required .auth-screen{display:flex;}
 body.auth-pending .landing-screen,body.auth-required .landing-screen,body.auth-pending header,body.auth-required header{display:none!important;}
 body.auth-pending .connect-screen,body.auth-required .connect-screen,body.auth-pending .game-layout,body.auth-required .game-layout,body.auth-pending .winner-overlay,body.auth-required .winner-overlay,body.auth-pending .disconnect-overlay,body.auth-required .disconnect-overlay,body.auth-pending .vs-overlay,body.auth-required .vs-overlay,body.auth-pending .countdown-overlay,body.auth-required .countdown-overlay{display:none!important;}
-body.auth-pending .sound-toggle,body.auth-required .sound-toggle,body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending .btn-exit,body.auth-required .btn-exit{display:none!important;}
+body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending .btn-exit,body.auth-required .btn-exit{display:none!important;}
 .auth-card{width:min(430px,94vw);padding:26px;background:rgba(19,19,31,0.92);border:1px solid rgba(0,240,255,0.35);border-radius:14px;box-shadow:0 0 40px rgba(0,240,255,0.12),0 18px 50px rgba(0,0,0,0.5);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);}
 .auth-logo{display:block;width:min(300px,82%);margin:0 auto 10px;filter:drop-shadow(0 0 20px rgba(0,240,255,0.24));}
 .auth-title{text-align:center;color:var(--neon-cyan);font-size:1rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
@@ -440,9 +442,10 @@ body.auth-pending .sound-toggle,body.auth-required .sound-toggle,body.auth-pendi
   #landing-leaderboard{width:min(230px,78vw);margin-top:2px;padding:10px 14px;}
   .landing-footer{position:static;margin-top:auto;padding-top:10px;}
   #warriors-bg{display:none!important;}
-  .sound-toggle,.info-toggle{top:10px;width:38px;height:38px;}
+  .sound-toggle,.music-toggle,.info-toggle{top:10px;width:38px;height:38px;}
   .sound-toggle{right:10px;}
-  .info-toggle{right:56px;}
+  .music-toggle{right:56px;}
+  .info-toggle{right:102px;}
 }
 
 @media(max-width:360px){
@@ -544,7 +547,8 @@ body.auth-pending .sound-toggle,body.auth-required .sound-toggle,body.auth-pendi
 </style>
 </head>
 <body class="auth-pending">
-<button class="sound-toggle" id="sound-toggle" title="Toggle Sound">[ON]</button>
+<button class="sound-toggle" id="sound-toggle" title="Sound effects on" aria-label="Sound effects on" aria-pressed="true">SFX</button>
+<button class="music-toggle" id="music-toggle" title="Music on" aria-label="Music on" aria-pressed="true">♫</button>
 <button class="info-toggle" id="info-toggle" title="Magic Cards Info">?</button>
 
 <header>
@@ -950,6 +954,7 @@ function setAuthenticatedAccount(account) {
   document.getElementById('player-name').value = playerName;
   document.getElementById('account-player-name').textContent = account ? account.playerName : '-';
   document.body.classList.remove('auth-pending', 'auth-required');
+  Sound.playMusic('menu');
 }
 
 function requireAuthentication(message) {
@@ -968,9 +973,13 @@ function requireAuthentication(message) {
   document.body.classList.add('auth-required');
   showAuthMode('login');
   setAuthStatus(message || 'Login diperlukan untuk bermain.', message ? 'error' : '');
+  Sound.playMusic('menu');
 }
 
 function authRequest(mode) {
+  Sound.init();
+  Sound.resumeMusic();
+  Sound.click();
   var register = mode === 'register';
   var form = document.getElementById(register ? 'register-form' : 'login-form');
   if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -1194,11 +1203,74 @@ var CARD_POOL = [
 
 /* ==================== SOUND SYSTEM ==================== */
 var Sound = {
-  ctx: null, enabled: true,
-  init: function () { if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.enabled = false; } } if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
-  tone: function (f, d, t, v, st) { if (!this.enabled || !this.ctx) return; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sine'; var tm = st || this.ctx.currentTime; o.frequency.setValueAtTime(f, tm); g.gain.setValueAtTime(0, tm); g.gain.linearRampToValueAtTime(v || 0.15, tm + 0.01); g.gain.exponentialRampToValueAtTime(0.001, tm + d); o.connect(g); g.connect(this.ctx.destination); o.start(tm); o.stop(tm + d); },
-  sweep: function (f1, f2, d, t, v) { if (!this.enabled || !this.ctx) return; var n = this.ctx.currentTime; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sawtooth'; o.frequency.setValueAtTime(f1, n); o.frequency.exponentialRampToValueAtTime(f2, n + d); g.gain.setValueAtTime(0, n); g.gain.linearRampToValueAtTime(v || 0.12, n + 0.01); g.gain.exponentialRampToValueAtTime(0.001, n + d); o.connect(g); g.connect(this.ctx.destination); o.start(n); o.stop(n + d); },
-  noise: function (d, v, ff) { if (!this.enabled || !this.ctx) return; var n = this.ctx.currentTime; var bs = this.ctx.sampleRate * d; var buf = this.ctx.createBuffer(1, bs, this.ctx.sampleRate); var dt = buf.getChannelData(0); for (var i = 0; i < bs; i++) dt[i] = (Math.random() * 2 - 1) * (1 - i / bs); var ns = this.ctx.createBufferSource(); ns.buffer = buf; var f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = ff || 1000; var g = this.ctx.createGain(); g.gain.setValueAtTime(v || 0.1, n); g.gain.exponentialRampToValueAtTime(0.001, n + d); ns.connect(f); f.connect(g); g.connect(this.ctx.destination); ns.start(n); ns.stop(n + d); },
+  ctx: null,
+  sfxGain: null,
+  musicGain: null,
+  sfxEnabled: true,
+  musicEnabled: true,
+  musicVolume: 0.20,
+  desiredTrack: 'menu',
+  currentTrack: null,
+  musicTimer: null,
+  musicStep: 0,
+  nextNoteTime: 0,
+  musicTempoScale: 1,
+  resultMode: false,
+  musicSources: [],
+  tracks: {
+    menu: {
+      tempo: 96,
+      melody: [72,null,76,null,79,null,76,null,74,null,77,null,81,null,77,null,72,null,76,null,79,81,79,null,69,null,72,null,76,null,74,null],
+      bass: [48,48,45,45,50,50,43,43]
+    },
+    battle: {
+      tempo: 152,
+      melody: [76,79,81,null,79,83,81,null,76,79,84,83,81,79,76,null,74,77,81,null,77,81,84,null,79,83,86,84,83,81,79,76],
+      bass: [40,40,43,43,38,38,45,45]
+    }
+  },
+  loadPreferences: function () {
+    try {
+      var savedMusic = localStorage.getItem('sifirMusicEnabled');
+      var savedSfx = localStorage.getItem('sifirSfxEnabled');
+      if (savedMusic === '0' || savedMusic === '1') this.musicEnabled = savedMusic === '1';
+      if (savedSfx === '0' || savedSfx === '1') this.sfxEnabled = savedSfx === '1';
+    } catch (e) {}
+  },
+  savePreferences: function () {
+    try {
+      localStorage.setItem('sifirMusicEnabled', this.musicEnabled ? '1' : '0');
+      localStorage.setItem('sifirSfxEnabled', this.sfxEnabled ? '1' : '0');
+    } catch (e) {}
+  },
+  init: function () {
+    if (!this.ctx) {
+      try {
+        var AudioEngine = window.AudioContext || window.webkitAudioContext;
+        if (!AudioEngine) return false;
+        this.ctx = new AudioEngine();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        this.sfxGain.gain.value = 1;
+        this.musicGain.gain.value = 0;
+        this.sfxGain.connect(this.ctx.destination);
+        this.musicGain.connect(this.ctx.destination);
+      } catch (e) {
+        this.ctx = null;
+        return false;
+      }
+    }
+    if (this.ctx.state === 'suspended') {
+      try {
+        var resumed = this.ctx.resume();
+        if (resumed && typeof resumed.catch === 'function') resumed.catch(function () {});
+      } catch (e) {}
+    }
+    return true;
+  },
+  tone: function (f, d, t, v, st) { if (!this.sfxEnabled || !this.ctx || !this.sfxGain) return; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sine'; var tm = st || this.ctx.currentTime; o.frequency.setValueAtTime(f, tm); g.gain.setValueAtTime(0, tm); g.gain.linearRampToValueAtTime(v || 0.15, tm + 0.01); g.gain.exponentialRampToValueAtTime(0.001, tm + d); o.connect(g); g.connect(this.sfxGain); o.start(tm); o.stop(tm + d); },
+  sweep: function (f1, f2, d, t, v) { if (!this.sfxEnabled || !this.ctx || !this.sfxGain) return; var n = this.ctx.currentTime; var o = this.ctx.createOscillator(); var g = this.ctx.createGain(); o.type = t || 'sawtooth'; o.frequency.setValueAtTime(f1, n); o.frequency.exponentialRampToValueAtTime(f2, n + d); g.gain.setValueAtTime(0, n); g.gain.linearRampToValueAtTime(v || 0.12, n + 0.01); g.gain.exponentialRampToValueAtTime(0.001, n + d); o.connect(g); g.connect(this.sfxGain); o.start(n); o.stop(n + d); },
+  noise: function (d, v, ff) { if (!this.sfxEnabled || !this.ctx || !this.sfxGain) return; var n = this.ctx.currentTime; var bs = this.ctx.sampleRate * d; var buf = this.ctx.createBuffer(1, bs, this.ctx.sampleRate); var dt = buf.getChannelData(0); for (var i = 0; i < bs; i++) dt[i] = (Math.random() * 2 - 1) * (1 - i / bs); var ns = this.ctx.createBufferSource(); ns.buffer = buf; var f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = ff || 1000; var g = this.ctx.createGain(); g.gain.setValueAtTime(v || 0.1, n); g.gain.exponentialRampToValueAtTime(0.001, n + d); ns.connect(f); f.connect(g); g.connect(this.sfxGain); ns.start(n); ns.stop(n + d); },
   click: function () { this.tone(800, 0.05, 'square', 0.08); },
   correct: function () { var n = this.ctx ? this.ctx.currentTime : 0; this.tone(523, 0.1, 'sine', 0.12, n); this.tone(659, 0.1, 'sine', 0.12, n + 0.08); this.tone(784, 0.15, 'sine', 0.12, n + 0.16); this.tone(1047, 0.2, 'sine', 0.1, n + 0.24); },
   wrong: function () { var n = this.ctx ? this.ctx.currentTime : 0; this.tone(300, 0.15, 'sawtooth', 0.1, n); this.tone(200, 0.3, 'sawtooth', 0.1, n + 0.12); },
@@ -1216,8 +1288,154 @@ var Sound = {
   cardActivate: function () { this.sweep(200, 1200, 0.3, 'sawtooth', 0.1); this.noise(0.15, 0.08, 2000); },
   shieldBlock: function () { var n = this.ctx ? this.ctx.currentTime : 0; this.tone(2000, 0.1, 'sine', 0.1, n); this.tone(1500, 0.15, 'sine', 0.08, n + 0.05); this.noise(0.1, 0.06, 3000); },
   heal: function () { var n = this.ctx ? this.ctx.currentTime : 0; this.tone(523, 0.1, 'sine', 0.1, n); this.tone(784, 0.15, 'sine', 0.1, n + 0.08); this.tone(1047, 0.2, 'sine', 0.1, n + 0.16); },
-  toggle: function () { this.enabled = !this.enabled; return this.enabled; }
+  noteFrequency: function (midi) { return 440 * Math.pow(2, (midi - 69) / 12); },
+  trackVolume: function () { return this.resultMode ? 0.09 : this.musicVolume; },
+  setMusicGain: function (value, duration) {
+    if (!this.ctx || !this.musicGain) return;
+    var now = this.ctx.currentTime;
+    var param = this.musicGain.gain;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(value, now + (duration || 0.08));
+  },
+  rememberMusicSource: function (source) {
+    var self = this;
+    this.musicSources.push(source);
+    source.onended = function () {
+      var index = self.musicSources.indexOf(source);
+      if (index !== -1) self.musicSources.splice(index, 1);
+    };
+  },
+  musicVoice: function (midi, start, duration, type, level) {
+    if (!this.ctx || !this.musicGain || typeof midi !== 'number') return;
+    var oscillator = this.ctx.createOscillator();
+    var gain = this.ctx.createGain();
+    oscillator.type = type || 'square';
+    oscillator.frequency.setValueAtTime(this.noteFrequency(midi), start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(level, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(this.musicGain);
+    this.rememberMusicSource(oscillator);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  },
+  musicPercussion: function (start, accent) {
+    if (!this.ctx || !this.musicGain) return;
+    var oscillator = this.ctx.createOscillator();
+    var gain = this.ctx.createGain();
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(accent ? 150 : 95, start);
+    oscillator.frequency.exponentialRampToValueAtTime(45, start + 0.055);
+    gain.gain.setValueAtTime(accent ? 0.08 : 0.045, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.06);
+    oscillator.connect(gain);
+    gain.connect(this.musicGain);
+    this.rememberMusicSource(oscillator);
+    oscillator.start(start);
+    oscillator.stop(start + 0.07);
+  },
+  scheduleMusicStep: function (track, step, start, stepDuration) {
+    var melody = track.melody[step % track.melody.length];
+    if (typeof melody === 'number') this.musicVoice(melody, start, stepDuration * 1.7, 'square', 0.12);
+    if (step % 4 === 0) {
+      var bass = track.bass[Math.floor(step / 4) % track.bass.length];
+      this.musicVoice(bass, start, stepDuration * 3.5, 'triangle', 0.16);
+      this.musicPercussion(start, true);
+    } else if (this.currentTrack === 'battle' && step % 2 === 0) {
+      this.musicPercussion(start, false);
+    }
+  },
+  scheduleMusic: function () {
+    if (!this.ctx || !this.currentTrack || !this.musicEnabled || document.hidden) return;
+    var track = this.tracks[this.currentTrack];
+    if (!track) return;
+    var stepDuration = 60 / (track.tempo * this.musicTempoScale) / 4;
+    while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
+      this.scheduleMusicStep(track, this.musicStep, this.nextNoteTime, stepDuration);
+      this.musicStep++;
+      this.nextNoteTime += stepDuration;
+    }
+  },
+  haltMusic: function () {
+    if (this.musicTimer) clearInterval(this.musicTimer);
+    this.musicTimer = null;
+    for (var i = 0; i < this.musicSources.length; i++) {
+      try { this.musicSources[i].stop(); } catch (e) {}
+    }
+    this.musicSources = [];
+    this.currentTrack = null;
+    this.setMusicGain(0, 0.04);
+  },
+  playMusic: function (trackName, restart) {
+    if (this.tracks[trackName]) this.desiredTrack = trackName;
+    updateAudioButtons();
+    if (!this.musicEnabled || document.hidden || !this.init()) return;
+    if (this.currentTrack === this.desiredTrack && this.musicTimer && !restart) {
+      this.setMusicGain(this.trackVolume(), 0.12);
+      return;
+    }
+    this.haltMusic();
+    this.currentTrack = this.desiredTrack;
+    this.musicStep = 0;
+    this.musicTempoScale = 1;
+    this.resultMode = false;
+    this.nextNoteTime = this.ctx.currentTime + 0.04;
+    this.setMusicGain(this.musicVolume, 0.18);
+    var self = this;
+    this.scheduleMusic();
+    this.musicTimer = setInterval(function () { self.scheduleMusic(); }, 25);
+  },
+  finishBattle: function () {
+    if (this.desiredTrack !== 'battle') return;
+    this.resultMode = true;
+    this.musicTempoScale = 0.68;
+    this.setMusicGain(this.trackVolume(), 0.18);
+  },
+  pauseMusic: function () { this.haltMusic(); },
+  resumeMusic: function () {
+    if (!this.musicEnabled || document.hidden) return;
+    var keepResultMode = this.resultMode;
+    this.playMusic(this.desiredTrack, true);
+    if (keepResultMode) this.finishBattle();
+  },
+  toggleSfx: function () {
+    this.sfxEnabled = !this.sfxEnabled;
+    this.savePreferences();
+    return this.sfxEnabled;
+  },
+  toggleMusic: function () {
+    this.musicEnabled = !this.musicEnabled;
+    this.savePreferences();
+    if (this.musicEnabled) this.resumeMusic(); else this.haltMusic();
+    return this.musicEnabled;
+  }
 };
+
+function updateAudioButtons() {
+  var sfxButton = document.getElementById('sound-toggle');
+  var musicButton = document.getElementById('music-toggle');
+  if (sfxButton) {
+    sfxButton.textContent = Sound.sfxEnabled ? 'SFX' : 'SFX×';
+    sfxButton.classList.toggle('muted', !Sound.sfxEnabled);
+    sfxButton.setAttribute('aria-pressed', Sound.sfxEnabled ? 'true' : 'false');
+    sfxButton.setAttribute('aria-label', Sound.sfxEnabled ? 'Sound effects on' : 'Sound effects off');
+    sfxButton.title = Sound.sfxEnabled ? 'Sound effects on' : 'Sound effects off';
+  }
+  if (musicButton) {
+    var trackLabel = Sound.desiredTrack === 'battle' ? 'battle track' : 'menu track';
+    musicButton.textContent = Sound.musicEnabled ? '♫' : '♫×';
+    musicButton.classList.toggle('muted', !Sound.musicEnabled);
+    musicButton.setAttribute('aria-pressed', Sound.musicEnabled ? 'true' : 'false');
+    musicButton.setAttribute('aria-label', Sound.musicEnabled ? 'Music on - ' + trackLabel : 'Music off');
+    musicButton.title = Sound.musicEnabled ? 'Music on - ' + trackLabel : 'Music off';
+  }
+}
+
+function unlockAudio() {
+  if (Sound.init()) Sound.resumeMusic();
+}
 
 /* ==================== BACKGROUND EFFECTS ==================== */
 function initBackground() {
@@ -1505,6 +1723,7 @@ function renderWeakTableReport(report) {
 function startSoloGame() {
   var settings = STATE.settings;
   var playerCards = dealCards();
+  Sound.playMusic('battle', true);
 
   STATE.you = 0;
   STATE.battleActive = true;
@@ -1737,6 +1956,7 @@ function soloCheckWin() {
       document.getElementById('btn-attack').disabled = true;
 
       // Display winner
+      Sound.finishBattle();
       Sound.winner();
       document.getElementById('winner-name').textContent = (winnerIdx === 0 ? 'You' : 'Times Tower') + ' Win!';
       var acc = winner.correct + winner.wrong > 0 ? Math.round((winner.correct / (winner.correct + winner.wrong)) * 100) : 0;
@@ -1972,6 +2192,7 @@ function resetRemoteSession() {
   document.getElementById('sprint-timer').classList.remove('show', 'warning');
   setWinnerRankedStatus('', '');
   setModeControlsLocked(false);
+  Sound.playMusic('menu');
 }
 
 function applyAuthoritativeRoomState(message) {
@@ -2257,6 +2478,7 @@ function handleMessage(msg) {
         document.getElementById('sprint-timer').textContent = '0:00';
       }
       var isWinner = msg.winnerIdx === STATE.you;
+      Sound.finishBattle();
       Sound.winner();
       document.getElementById('winner-name').textContent = msg.winnerName + (isWinner ? ' (You)' : '');
       document.getElementById('winner-stats').innerHTML =
@@ -2291,6 +2513,7 @@ function handleMessage(msg) {
       stopTimerDisplay();
       document.getElementById('disconnect-msg').textContent = 'Opponent disconnected';
       document.getElementById('disconnect-overlay').classList.add('show');
+      Sound.playMusic('menu');
       break;
   }
 }
@@ -2370,6 +2593,7 @@ function showVSScreen(opponentName) {
 }
 
 function showVSOverlay() {
+  Sound.playMusic('battle', true);
   var p1Name = STATE.players[0].name;
   var p2Name = STATE.players[1].name;
   document.getElementById('vs-name-left').textContent = p1Name;
@@ -2537,6 +2761,7 @@ function goHome() {
   hpSections.forEach(function (el) { el.style.display = ''; });
   magicSections.forEach(function (el) { el.style.display = ''; });
   setModeControlsLocked(false);
+  Sound.playMusic('menu');
   Sound.click();
 }
 
@@ -2841,6 +3066,7 @@ function showConnectScreen() {
   document.getElementById('landing-screen').classList.add('hide');
   document.getElementById('connect-screen').classList.add('show');
   document.getElementById('header-info').classList.add('show');
+  Sound.playMusic('menu');
   if (!STATE.ws || STATE.ws.readyState > WebSocket.OPEN) connectWebSocket();
 }
 
@@ -2960,14 +3186,17 @@ function initEventListeners() {
     }
   });
 
-  // Sound toggle
+  // Independent SFX and music toggles
   document.getElementById('sound-toggle').addEventListener('click', function () {
     Sound.init();
-    var en = Sound.toggle();
-    var btn = document.getElementById('sound-toggle');
-    btn.textContent = en ? '[ON]' : '[OFF]';
-    btn.classList.toggle('muted', !en);
-    if (en) Sound.click();
+    var enabled = Sound.toggleSfx();
+    updateAudioButtons();
+    if (enabled) Sound.click();
+  });
+  document.getElementById('music-toggle').addEventListener('click', function () {
+    Sound.init();
+    Sound.toggleMusic();
+    updateAudioButtons();
   });
 
   // Info toggle
@@ -2991,6 +3220,7 @@ function initEventListeners() {
   // Winner buttons
   document.getElementById('winner-rematch').addEventListener('click', function () {
     Sound.click();
+    Sound.playMusic('battle', true);
     document.getElementById('winner-overlay').classList.remove('show');
     setWinnerRankedStatus('', '');
     if (STATE.gameMode === 'solo') {
@@ -3016,6 +3246,12 @@ function initEventListeners() {
 
 /* ==================== INIT ==================== */
 function init() {
+  Sound.loadPreferences();
+  updateAudioButtons();
+  document.addEventListener('pointerdown', unlockAudio, { once: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) Sound.pauseMusic(); else Sound.resumeMusic();
+  });
   document.getElementById('header-subtitle').classList.add('hide');
   initEventListeners();
   initModeToggle();

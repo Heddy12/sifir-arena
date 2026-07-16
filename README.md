@@ -10,6 +10,7 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 | `client.html` | Game client (self-contained) — connect screen, Solo Quest, Sprint & multiplayer battle arena, real-time sync |
 | `leaderboard-store.js` | PostgreSQL account, session and persistent leaderboard storage |
 | `server-auth.test.js` | Authentication, WebSocket access and Create Room regression tests |
+| `client-audio.test.js` | Chiptune scheduler, Music/SFX controls and persistence tests |
 | `package.json` | Node.js dependencies and scripts |
 
 ## Quick Start (Local Testing)
@@ -88,6 +89,7 @@ git push -u origin main
 - Each player gets 3 random Magic Cards before battle
 - Click a card during your turn to activate it
 - First to drop opponent HP to 0 wins!
+- Use the music-note button to toggle chiptune music and the SFX button to control effects independently
 
 ## Magic Cards (10 Types)
 
@@ -142,7 +144,7 @@ git push -u origin main
 ## Tech Stack
 - **Server:** Node.js + ws (WebSocket library)
 - **Client:** Vanilla HTML/CSS/JS (no frameworks)
-- **Audio:** Web Audio API (no external files)
+- **Audio:** Original menu and battle chiptunes plus sound effects generated with Web Audio API (no external files)
 - **Storage:** PostgreSQL for accounts, sessions and leaderboard data; active rooms remain server-authoritative in memory
 
 ## License
