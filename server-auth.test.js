@@ -73,9 +73,37 @@ async function run() {
     assert.strictEqual(JSON.stringify(profileBody).includes('g-97558615@moe-dl.edu.my'), false);
     response = await fetch(base + '/api/profile', {
       method: 'PATCH', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ avatarKey: 'knight-cyan', bio: 'Training for the arena' })
+      body: JSON.stringify({ avatarKey: 'knight-red', bio: 'Training for the arena' })
     });
     assert.strictEqual(response.status, 200);
+    let updatedProfileBody = await response.json();
+    assert.strictEqual(updatedProfileBody.profile.avatarKey, 'knight-red');
+    response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
+    profileBody = await response.json();
+    assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');
+
+    response = await fetch(base + '/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: base },
+      body: JSON.stringify({ email: 'other.player@example.com', password: 'secure-pass-456', playerName: 'OtherViewer' })
+    });
+    assert.strictEqual(response.status, 201);
+    const otherCookie = response.headers.get('set-cookie').split(';')[0];
+    response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: otherCookie } });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual((await response.json()).profile.isOwner, false);
+    response = await fetch(base + '/api/profile', {
+      method: 'PATCH', headers: { Cookie: otherCookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: accountBody.account.accountId, player: 'RoomHero', avatarKey: 'hero-fire', bio: 'Attempted overwrite' })
+    });
+    assert.strictEqual(response.status, 200);
+    updatedProfileBody = await response.json();
+    assert.strictEqual(updatedProfileBody.profile.avatarKey, 'hero-fire');
+    response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
+    profileBody = await response.json();
+    assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');
+    assert.strictEqual(profileBody.profile.player.bio, 'Training for the arena');
+
     response = await fetch(base + '/api/ranked-ladder?mode=solo&limit=10', { headers: { Cookie: cookie } });
     assert.strictEqual(response.status, 200);
     assert.ok(Array.isArray((await response.json()).entries));

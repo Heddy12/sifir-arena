@@ -1517,6 +1517,7 @@ function authErrorStatus(error) {
   if (error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN') return 409;
   if (error.code === 'LEADERBOARD_UNAVAILABLE') return 503;
   if (error.code === 'PROFILE_NOT_FOUND') return 404;
+  if (error.code === 'PROFILE_NOT_EDITABLE') return 403;
   if (String(error.code || '').startsWith('INVALID_') || error.code === 'BODY_TOO_LARGE') return 400;
   return 500;
 }

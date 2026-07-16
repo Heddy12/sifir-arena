@@ -268,6 +268,11 @@ async function ensureSchema() {
       );
 
       CREATE INDEX IF NOT EXISTS player_match_history_profile_idx ON player_match_history(profile_id, played_at DESC);
+
+      CREATE TABLE IF NOT EXISTS app_migrations (
+        migration_key VARCHAR(80) PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     schemaReady = true;
     lastError = null;
@@ -501,15 +506,172 @@ async function upsertProfile(client, profile) {
   return { profileId: profileId, name: name };
 }
 
+const BOT_SEED_RANKS = [350, 500, 650, 800, 1000, 1200, 1400, 1600, 1900, 2200];
+const BOT_SEED_AVATARS = ['star-green', 'mage-cyan', 'hero-fire', 'knight-red', 'crown-purple', 'hero-blue', 'hero-shadow', 'hero-gold', 'mage-cyan', 'crown-purple'];
+const BOT_SEED_BIOS = [
+  'Learning one table at a time. See you in the arena!',
+  'Chill player chasing a longer winning streak.',
+  'Powered by roti canai and multiplication practice.',
+  'Training speed, accuracy and smarter card plays.',
+  'Cloudy name, focused mind. Ready for quick match.',
+  'Every battle is another chance to improve.',
+  'Numbers are my power. Consistency is my strategy.',
+  'Fast answers, clean plays and zero lag.',
+  'Always searching for the next difficult challenge.',
+  'Climbing the season rank one victory at a time.'
+];
+const BOT_SEED_CARDS = ['shield', 'healPotion', 'revealHint', 'doubleStrike', 'timeFreeze', 'streakBoost', 'stealHP', 'secondChance', 'mirrorShield', 'skipQuestion'];
+
+function clampNumber(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function buildBotSeed(bot, index, rank) {
+  const accuracy = Math.round((bot.accuracyMin + bot.accuracyMax) * 50);
+  const winRate = clampNumber(Math.round(37 + (rank - 300) * 52 / 1900), 37, 89);
+  function modeStats(games, accuracyOffset) {
+    const wins = Math.round(games * winRate / 100);
+    const attempts = games * (7 + Math.floor(index / 3));
+    const modeAccuracy = clampNumber(accuracy + accuracyOffset, 45, 98);
+    const correct = Math.round(attempts * modeAccuracy / 100);
+    return {
+      games: games, wins: wins, losses: games - wins, correct: correct,
+      wrong: attempts - correct, accuracy: modeAccuracy, score: correct * 10 + wins * 5
+    };
+  }
+  const multiplayer = modeStats(28 + index * 7, 0);
+  const sprint = modeStats(16 + index * 4, index % 2 ? 1 : -1);
+  const totalGames = multiplayer.games + sprint.games;
+  const totalWins = multiplayer.wins + sprint.wins;
+  return {
+    rank: rank,
+    accuracy: accuracy,
+    winRate: winRate,
+    multiplayer: multiplayer,
+    sprint: sprint,
+    xp: totalGames * 7 + totalWins * 13,
+    currentStreak: clampNumber(Math.floor((winRate - 30) / 15), 0, 5),
+    bestStreak: clampNumber(2 + Math.floor((rank - 300) / 280), 2, 10),
+    avatar: BOT_SEED_AVATARS[index],
+    bio: BOT_SEED_BIOS[index]
+  };
+}
+
+async function addBotModeSeed(client, profileId, mode, stats) {
+  await client.query(
+    `INSERT INTO player_mode_stats
+      (profile_id, mode, games_played, wins, losses, ranked_games, ranked_wins, total_score, total_correct, total_wrong)
+     VALUES ($1,$2,$3,$4,$5,$3,$4,$6,$7,$8)
+     ON CONFLICT (profile_id, mode) DO UPDATE SET
+       games_played = player_mode_stats.games_played + EXCLUDED.games_played,
+       wins = player_mode_stats.wins + EXCLUDED.wins,
+       losses = player_mode_stats.losses + EXCLUDED.losses,
+       ranked_games = player_mode_stats.ranked_games + EXCLUDED.ranked_games,
+       ranked_wins = player_mode_stats.ranked_wins + EXCLUDED.ranked_wins,
+       total_score = player_mode_stats.total_score + EXCLUDED.total_score,
+       total_correct = player_mode_stats.total_correct + EXCLUDED.total_correct,
+       total_wrong = player_mode_stats.total_wrong + EXCLUDED.total_wrong`,
+    [profileId, mode, stats.games, stats.wins, stats.losses, stats.score, stats.correct, stats.wrong]
+  );
+}
+
+async function seedBotProfileActivity(client, bot, index, rank) {
+  const seed = buildBotSeed(bot, index, rank);
+  await client.query(
+    `UPDATE player_profile_details SET avatar_key = $2, bio = $3,
+       xp = GREATEST(xp, $4), current_win_streak = GREATEST(current_win_streak, $5),
+       best_win_streak = GREATEST(best_win_streak, $6), updated_at = NOW()
+     WHERE profile_id = $1`,
+    [bot.profileId, seed.avatar, seed.bio, seed.xp, seed.currentStreak, seed.bestStreak]
+  );
+  await addBotModeSeed(client, bot.profileId, 'multiplayer', seed.multiplayer);
+  await addBotModeSeed(client, bot.profileId, 'sprint', seed.sprint);
+  await client.query(
+    `INSERT INTO leaderboard_stats
+      (profile_id, mode, wins, games_played, updated_at)
+     VALUES ($1, 'multiplayer', $2, $3, NOW())
+     ON CONFLICT (profile_id, mode) DO UPDATE SET
+       wins = leaderboard_stats.wins + EXCLUDED.wins,
+       games_played = leaderboard_stats.games_played + EXCLUDED.games_played,
+       updated_at = NOW()`,
+    [bot.profileId, seed.multiplayer.wins, seed.multiplayer.games]
+  );
+  await client.query(
+    `INSERT INTO leaderboard_stats
+      (profile_id, mode, best_score, best_correct, best_wrong, best_accuracy, wins, games_played, updated_at)
+     VALUES ($1, 'sprint', $2, $3, $4, $5, $6, $7, NOW())
+     ON CONFLICT (profile_id, mode) DO UPDATE SET
+       best_score = GREATEST(leaderboard_stats.best_score, EXCLUDED.best_score),
+       best_correct = GREATEST(leaderboard_stats.best_correct, EXCLUDED.best_correct),
+       best_accuracy = GREATEST(leaderboard_stats.best_accuracy, EXCLUDED.best_accuracy),
+       wins = leaderboard_stats.wins + EXCLUDED.wins,
+       games_played = leaderboard_stats.games_played + EXCLUDED.games_played,
+       updated_at = NOW()`,
+    [bot.profileId, Math.max(80, Math.round(seed.sprint.correct / seed.sprint.games) * 10), Math.max(8, Math.round(seed.sprint.correct / seed.sprint.games)), Math.max(0, Math.round(seed.sprint.wrong / seed.sprint.games)), seed.sprint.accuracy, seed.sprint.wins, seed.sprint.games]
+  );
+  for (let table = 1; table <= 12; table++) {
+    const attempts = 12 + index * 2 + (table % 4);
+    const tableAccuracy = clampNumber(seed.accuracy + ((table * 7 + index * 3) % 9) - 4, 42, 99);
+    const correct = Math.round(attempts * tableAccuracy / 100);
+    await client.query(
+      `INSERT INTO player_table_stats (profile_id, table_number, correct, wrong) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (profile_id, table_number) DO UPDATE SET
+         correct = player_table_stats.correct + EXCLUDED.correct,
+         wrong = player_table_stats.wrong + EXCLUDED.wrong`,
+      [bot.profileId, table, correct, attempts - correct]
+    );
+  }
+  for (let cardOffset = 0; cardOffset < 4; cardOffset++) {
+    const cardId = BOT_SEED_CARDS[(index + cardOffset) % BOT_SEED_CARDS.length];
+    const uses = Math.max(2, Math.round((seed.multiplayer.games + seed.sprint.games) / (5 + cardOffset)));
+    await client.query(
+      `INSERT INTO player_card_stats (profile_id, card_id, uses) VALUES ($1,$2,$3)
+       ON CONFLICT (profile_id, card_id) DO UPDATE SET uses = player_card_stats.uses + EXCLUDED.uses`,
+      [bot.profileId, cardId, uses]
+    );
+  }
+  const badges = ['first-victory'];
+  if (seed.multiplayer.wins + seed.sprint.wins >= 10) badges.push('ten-wins');
+  if (seed.multiplayer.wins + seed.sprint.wins >= 50) badges.push('fifty-wins');
+  if (seed.multiplayer.games + seed.sprint.games >= 100) badges.push('hundred-battles');
+  if (seed.bestStreak >= 5) badges.push('hot-streak');
+  if (seed.accuracy >= 90) badges.push('perfect-battle');
+  if (seed.sprint.games >= 20) badges.push('sprint-star');
+  for (const badge of badges) {
+    await client.query('INSERT INTO player_badges (profile_id, badge_key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [bot.profileId, badge]);
+  }
+  for (let historyIndex = 0; historyIndex < 8; historyIndex++) {
+    const mode = historyIndex % 3 === 0 ? 'sprint' : 'multiplayer';
+    const won = ((historyIndex * 37 + index * 13) % 100) < seed.winRate;
+    const attempts = 8 + ((historyIndex + index) % 5);
+    const matchAccuracy = clampNumber(seed.accuracy + ((historyIndex * 5 + index) % 7) - 3, 40, 99);
+    const correct = Math.round(attempts * matchAccuracy / 100);
+    const delta = won ? 12 + ((historyIndex + index) % 8) : -(9 + ((historyIndex + index) % 7));
+    const rankAfter = Math.max(0, rank - historyIndex * 4);
+    const opponent = botCatalog.BOT_PROFILES[(index + historyIndex + 1) % botCatalog.BOT_PROFILES.length];
+    await client.query(
+      `INSERT INTO player_match_history
+        (match_id, profile_id, mode, match_type, ranked, result, opponent_name, score, correct, wrong,
+         accuracy, duration_seconds, xp_awarded, rank_before, rank_delta, rank_after, settings_json, played_at)
+       VALUES ($1,$2,$3,'quick',TRUE,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       ON CONFLICT DO NOTHING`,
+      ['bot_profile_seed_v1_' + index + '_' + historyIndex, bot.profileId, mode, won ? 'win' : 'loss', opponent.name,
+        correct * 10, correct, attempts - correct, matchAccuracy, mode === 'sprint' ? 60 : 42 + historyIndex,
+        won ? 24 : 12, Math.max(0, rankAfter - delta), delta, rankAfter,
+        JSON.stringify({ timer: mode === 'multiplayer' ? 6 : 20, sifir: 0, difficulty: 'random', sprintTime: 60 }),
+        new Date(Date.now() - (historyIndex + 1) * 86400000)]
+    );
+  }
+}
+
 async function seedArenaBots() {
   await ensureSchema();
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
-    const botRanks = [350, 500, 650, 800, 1000, 1200, 1400, 1600, 1900, 2200];
     for (let index = 0; index < botCatalog.BOT_PROFILES.length; index++) {
       const bot = botCatalog.BOT_PROFILES[index];
-      const profile = await ensureProfileRows(client, bot, { solo: 600, multiplayer: botRanks[index], sprint: botRanks[index] });
+      const profile = await ensureProfileRows(client, bot, { solo: 600, multiplayer: BOT_SEED_RANKS[index], sprint: BOT_SEED_RANKS[index] });
       for (const mode of ['multiplayer', 'sprint']) {
         await client.query(
           `INSERT INTO leaderboard_stats (profile_id, mode, wins, games_played, updated_at)
@@ -518,6 +680,20 @@ async function seedArenaBots() {
           [profile.profileId, mode]
         );
       }
+    }
+    const activitySeeded = await client.query("SELECT 1 FROM app_migrations WHERE migration_key = 'bot_profile_activity_v1'");
+    if (!activitySeeded.rows[0]) {
+      const season = await ensureCurrentSeason(client);
+      for (let index = 0; index < botCatalog.BOT_PROFILES.length; index++) {
+        const bot = botCatalog.BOT_PROFILES[index];
+        const rankResult = await client.query(
+          `SELECT rp FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = 'multiplayer'`,
+          [bot.profileId, season.season_id]
+        );
+        const rank = rankResult.rows[0] ? Number(rankResult.rows[0].rp) : BOT_SEED_RANKS[index];
+        await seedBotProfileActivity(client, bot, index, rank);
+      }
+      await client.query("INSERT INTO app_migrations (migration_key) VALUES ('bot_profile_activity_v1')");
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -730,7 +906,10 @@ async function updateProfile(profileId, input) {
   const bio = normalizeBio(input && input.bio);
   if (bio === null) throw authError('INVALID_BIO', 'Bio tidak boleh mengandungi URL atau alamat emel.');
   await ensureSchema();
-  const result = await getPool().query(
+  const db = getPool();
+  const owner = await db.query('SELECT 1 FROM player_accounts WHERE account_id = $1', [id]);
+  if (!owner.rows[0]) throw authError('PROFILE_NOT_EDITABLE', 'Hanya pemilik akaun boleh mengedit profile ini.');
+  const result = await db.query(
     `UPDATE player_profile_details SET avatar_key = $2, bio = $3, updated_at = NOW()
      WHERE profile_id = $1 RETURNING avatar_key, bio`,
     [id, avatarKey, bio]

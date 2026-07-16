@@ -69,6 +69,24 @@ async function run() {
     store.updateProfile(registered.account.accountId, { avatarKey: 'hero-blue', bio: 'email me at hero@example.com' }),
     function (error) { return error.code === 'INVALID_BIO'; }
   );
+  const seededBot = botCatalog.BOT_PROFILES[0];
+  const seededBotProfile = await store.getPlayerProfile(seededBot.name, registered.account.accountId);
+  assert.strictEqual(seededBotProfile.isOwner, false);
+  assert.ok(seededBotProfile.overview.totalGames > 0);
+  assert.ok(seededBotProfile.modes.multiplayer.gamesPlayed > 0);
+  assert.ok(seededBotProfile.modes.sprint.gamesPlayed > 0);
+  assert.strictEqual(seededBotProfile.tables.length, 12);
+  assert.ok(seededBotProfile.history.length >= 8);
+  assert.ok(seededBotProfile.badges.length > 0);
+  assert.ok(seededBotProfile.favoriteCard);
+  assert.ok(seededBotProfile.overview.accuracy >= 45 && seededBotProfile.overview.accuracy <= 60);
+  await assert.rejects(
+    store.updateProfile(seededBot.profileId, { avatarKey: 'hero-gold', bio: 'Changed by another player' }),
+    function (error) { return error.code === 'PROFILE_NOT_EDITABLE'; }
+  );
+  const seededMultiplayerRows = await store.getLeaderboard('multiplayer', 50);
+  const seededBotLeaderboard = seededMultiplayerRows.find(function (row) { return row.name === seededBot.name; });
+  assert.ok(seededBotLeaderboard && seededBotLeaderboard.gamesPlayed > 0);
 
   const rankedMatch = await store.recordCompletedMatch({
     matchId: 'match_profile_test_001', mode: 'multiplayer', matchType: 'quick', ranked: true,
@@ -115,8 +133,10 @@ async function run() {
   await store.recordBest(playerA, 'sprint', { score: 100, correct: 10, wrong: 1, accuracy: 91 });
   await store.recordBest(playerB, 'sprint', { score: 110, correct: 11, wrong: 8, accuracy: 58 });
   rows = await store.getLeaderboard('sprint', 10);
-  assert.strictEqual(rows[0].correct, 11);
-  assert.strictEqual(rows[1].accuracy, 91);
+  const playerASprint = rows.find(function (row) { return row.name === playerA.name && row.accuracy === 91; });
+  const playerBSprint = rows.find(function (row) { return row.name === playerB.name && row.correct === 11; });
+  assert.ok(playerASprint);
+  assert.ok(playerBSprint);
   const sprintRows = await store.getLeaderboard('sprint', 50);
   assert.ok(botCatalog.BOT_PROFILES.every(function (bot) { return sprintRows.some(function (row) { return row.name === bot.name; }); }));
 
@@ -128,7 +148,7 @@ async function run() {
     { profileId: playerA.profileId, name: 'Renamed Player', winner: false },
     { profileId: playerB.profileId, name: playerB.name, winner: true }
   ]);
-  rows = await store.getLeaderboard('multiplayer', 10);
+  rows = await store.getLeaderboard('multiplayer', 50);
   const humanRows = rows.filter(function (row) { return row.name === 'Renamed Player' || row.name === playerB.name; });
   assert.strictEqual(humanRows.length, 2);
   assert.ok(humanRows.every(function (row) { return row.wins === 1 && row.gamesPlayed === 2 && row.winRate === 50; }));
@@ -141,8 +161,8 @@ async function run() {
   rows = await store.getLeaderboard('multiplayer', 50);
   const botRow = rows.find(function (row) { return row.name === botProfile.name; });
   assert.ok(botRow);
-  assert.strictEqual(botRow.wins, 1);
-  assert.strictEqual(botRow.gamesPlayed, 1);
+  assert.strictEqual(botRow.wins, seededBotLeaderboard.wins + 1);
+  assert.strictEqual(botRow.gamesPlayed, seededBotLeaderboard.gamesPlayed + 1);
   const updatedPlayerA = rows.find(function (row) { return row.name === 'Renamed Player'; });
   assert.strictEqual(updatedPlayerA.wins, 1);
   assert.strictEqual(updatedPlayerA.gamesPlayed, 3);
@@ -157,6 +177,10 @@ async function run() {
   delete require.cache[storePath];
   store = require('./leaderboard-store');
   await store.initialize();
+  const botRowsAfterRestart = await store.getLeaderboard('multiplayer', 50);
+  const botAfterRestart = botRowsAfterRestart.find(function (row) { return row.name === seededBot.name; });
+  assert.strictEqual(botAfterRestart.wins, botRow.wins, 'bot seed must only be applied once');
+  assert.strictEqual(botAfterRestart.gamesPlayed, botRow.gamesPlayed, 'bot games must persist without duplicate seeding');
   rows = await store.getLeaderboard('solo', 10);
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(rows[0].score, 110);

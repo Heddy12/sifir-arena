@@ -122,6 +122,7 @@ function run() {
   assert.ok(loaded.rankGuide[7].range.includes('Top 50'));
   assert.ok(loaded.html.includes('Demotion Shield'), 'rank guide should explain demotion protection');
   assert.strictEqual(loaded.html.includes('Placement Rank'), false, 'rank should be visible immediately without placement');
+  assert.ok(loaded.html.includes('edit.hidden = !p.isOwner'), 'profile editor should only be visible to its owner');
   console.log('client audio tests passed');
 }
 
