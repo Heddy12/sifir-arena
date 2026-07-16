@@ -430,7 +430,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .home-rank-card:hover{transform:translateY(-2px);border-color:var(--rank);box-shadow:0 0 18px color-mix(in srgb,var(--rank) 22%,transparent);}
 .home-rank-emblem{position:relative;width:36px;height:42px;display:grid;place-items:center;clip-path:polygon(50% 0,94% 18%,88% 72%,50% 100%,12% 72%,6% 18%);background:linear-gradient(145deg,color-mix(in srgb,var(--rank) 85%,white),color-mix(in srgb,var(--rank) 55%,#080812));color:#090914;font-size:1rem;font-weight:bold;filter:drop-shadow(0 0 7px color-mix(in srgb,var(--rank) 46%,transparent));}
 .home-rank-copy{position:relative;display:block;min-width:0}.home-rank-mode{display:block;color:var(--text-dim);font-size:.45rem;text-transform:uppercase;letter-spacing:.7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.home-rank-name{display:block;color:var(--rank);font-size:.64rem;font-weight:bold;line-height:1.25;margin:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.home-rank-meta{display:flex;justify-content:space-between;gap:5px;color:var(--text-dim);font-size:.46rem}.home-rank-progress{display:block;height:4px;margin-top:5px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}.home-rank-progress span{display:block;height:100%;border-radius:inherit;background:var(--rank);box-shadow:0 0 7px var(--rank)}
-.home-rank-card.tier-number-novice{--rank:#a7afbd}.home-rank-card.tier-times-apprentice{--rank:#46e58a}.home-rank-card.tier-multiply-warrior{--rank:#00f0ff}.home-rank-card.tier-number-knight{--rank:#4f8dff}.home-rank-card.tier-times-commander{--rank:#bd5cff}.home-rank-card.tier-math-legend{--rank:#ffe600}.home-rank-card.tier-arena-hero{--rank:#ff7139}.home-rank-card.tier-times-immortal{--rank:#ff4fd8;animation:immortalGlow 2.2s ease-in-out infinite alternate}
+.tier-number-novice{--rank:#a7afbd}.tier-times-apprentice{--rank:#46e58a}.tier-multiply-warrior{--rank:#00f0ff}.tier-number-knight{--rank:#4f8dff}.tier-times-commander{--rank:#bd5cff}.tier-math-legend{--rank:#ffe600}.tier-arena-hero{--rank:#ff7139}.tier-times-immortal{--rank:#ff4fd8}.home-rank-card.tier-times-immortal{animation:immortalGlow 2.2s ease-in-out infinite alternate}
 @keyframes immortalGlow{to{box-shadow:0 0 22px rgba(255,79,216,.3),0 0 9px rgba(0,240,255,.2)}}
 .home-rank-state{grid-column:1/-1;padding:15px;color:var(--text-dim);font-size:.58rem;text-align:center}.home-rank-state.error{color:var(--neon-orange)}
 
@@ -553,6 +553,13 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .leaderboard-table tbody tr:nth-child(-n+3){background:rgba(255,230,0,0.035);}
 .leaderboard-note{font-size:0.62rem;color:var(--text-dim);text-align:center;margin-top:14px;}
 .leaderboard-player{cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,240,255,.35);}
+.rank-guide{margin-top:20px;padding-top:17px;border-top:1px solid rgba(255,230,0,.2);text-align:left;}
+.rank-guide-header{text-align:center;margin-bottom:12px}.rank-guide-title{color:var(--neon-yellow);font-size:.82rem;font-weight:bold;text-transform:uppercase;letter-spacing:2px}.rank-guide-subtitle{margin-top:5px;color:var(--text-dim);font-size:.58rem;line-height:1.5}
+.rank-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.rank-guide-card{--rank:#a7afbd;display:grid;grid-template-columns:42px minmax(0,1fr);gap:9px;align-items:center;position:relative;overflow:hidden;padding:10px;border:1px solid color-mix(in srgb,var(--rank) 42%,var(--border));border-radius:9px;background:linear-gradient(135deg,color-mix(in srgb,var(--rank) 8%,var(--bg-card-2)),var(--bg-card-2));}
+.rank-guide-emblem{width:38px;height:43px;display:grid;place-items:center;clip-path:polygon(50% 0,94% 18%,88% 72%,50% 100%,12% 72%,6% 18%);background:linear-gradient(145deg,color-mix(in srgb,var(--rank) 88%,white),color-mix(in srgb,var(--rank) 58%,#080812));color:#090914;font-size:.72rem;font-weight:bold;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--rank) 40%,transparent));}
+.rank-guide-name{color:var(--rank);font-size:.64rem;font-weight:bold;letter-spacing:.5px}.rank-guide-range{color:var(--text);font-size:.52rem;margin:3px 0}.rank-guide-desc{color:var(--text-dim);font-size:.5rem;line-height:1.45}
+.rank-guide-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}.rank-guide-rule{padding:8px 9px;border:1px solid var(--border);border-radius:7px;background:rgba(10,10,20,.45);color:var(--text-dim);font-size:.51rem;line-height:1.45}.rank-guide-rule strong{color:var(--neon-cyan)}
 
 /* ==================== PLAYER PROFILE ==================== */
 .profile-overlay{position:fixed;inset:0;background:rgba(7,7,12,.97);display:none;align-items:center;justify-content:center;z-index:1020;padding:18px;box-sizing:border-box;}
@@ -576,10 +583,12 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
   .leaderboard-tab{font-size:0.62rem;padding:9px 4px;}
   .leaderboard-table{font-size:0.7rem;}
   .leaderboard-table th,.leaderboard-table td{padding:9px 5px;}
+  .rank-guide-card{padding:8px 7px;grid-template-columns:34px minmax(0,1fr);gap:6px}.rank-guide-emblem{width:32px;height:37px;font-size:.62rem}.rank-guide-name{font-size:.56rem}.rank-guide-range,.rank-guide-desc{font-size:.45rem}.rank-guide-rules{grid-template-columns:1fr}
   .winner-buttons{flex-wrap:wrap;justify-content:center;}
   .landing-account{flex-wrap:wrap;justify-content:center;}
   .profile-panel{padding:15px 11px}.profile-grid{grid-template-columns:repeat(2,1fr)}.profile-tabs{grid-template-columns:repeat(2,1fr)}.profile-edit{grid-template-columns:1fr}.history-row{grid-template-columns:64px 1fr 58px;font-size:.55rem}.history-row span:nth-child(4){display:none}
 }
+@media(max-width:360px){.rank-guide-grid{grid-template-columns:1fr}.rank-guide-name{font-size:.62rem}.rank-guide-range,.rank-guide-desc{font-size:.49rem}}
 
 /* ==================== BACKGROUND RESPONSIVE ==================== */
 @media(max-width:768px){
@@ -958,6 +967,16 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     <div class="leaderboard-preset">Ranked: Room/Solo 20s, Multiplayer Quick Match 6s, Sprint 60s. All Tables dan Random.</div>
     <div id="leaderboard-content" aria-live="polite"></div>
     <div class="leaderboard-note">Top 10 musim semasa. Setiap mode mempunyai ranking berasingan.</div>
+    <section class="rank-guide" aria-labelledby="rank-guide-title">
+      <div class="rank-guide-header"><div class="rank-guide-title" id="rank-guide-title">Rank Guide</div><div class="rank-guide-subtitle">Learn what each season rank means and how to reach the next level.</div></div>
+      <div class="rank-guide-grid" id="rank-guide-grid"></div>
+      <div class="rank-guide-rules">
+        <div class="rank-guide-rule"><strong>Placement:</strong> Complete 5 ranked matches in each mode to reveal your rank.</div>
+        <div class="rank-guide-rule"><strong>Divisions:</strong> The first 6 ranks progress from Division III to II, then I.</div>
+        <div class="rank-guide-rule"><strong>Separate Ranks:</strong> Solo, Multiplayer and Sprint each have their own RP.</div>
+        <div class="rank-guide-rule"><strong>Demotion Shield:</strong> Protects you once from dropping below an earned tier.</div>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -1236,8 +1255,34 @@ var HOME_RANK_MODES = [
   { key: 'sprint', label: 'Sprint Blitz', emblem: '&#9201;' }
 ];
 
+var RANK_GUIDE = [
+  { name: 'Number Novice', range: '0–299 RP', emblem: 'NN', description: 'The starting rank for players building confidence with basic multiplication.' },
+  { name: 'Times Apprentice', range: '300–599 RP', emblem: 'TA', description: 'A developing learner who is improving speed and answer accuracy.' },
+  { name: 'Multiply Warrior', range: '600–899 RP', emblem: 'MW', description: 'A steady arena fighter who can handle a wide mix of times tables.' },
+  { name: 'Number Knight', range: '900–1199 RP', emblem: 'NK', description: 'A consistent player with strong multiplication fundamentals.' },
+  { name: 'Times Commander', range: '1200–1499 RP', emblem: 'TC', description: 'A skilled competitor who combines accuracy, speed and smart play.' },
+  { name: 'Math Legend', range: '1500–1799 RP', emblem: 'ML', description: 'An elite player demonstrating mastery across the multiplication arena.' },
+  { name: 'Arena Hero', range: '1800+ RP', emblem: 'AH', description: 'A top-tier challenger with exceptional season performance.' },
+  { name: 'Times Immortal', range: '2100+ RP · Season Top 50', emblem: '∞', description: 'The highest honour, reserved for the season’s fifty strongest players.' }
+];
+
 function rankTierClass(tier) {
   return 'tier-' + String(tier || 'Number Novice').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function renderRankGuide() {
+  var grid = document.getElementById('rank-guide-grid');
+  if (!grid) return;
+  grid.textContent = '';
+  RANK_GUIDE.forEach(function (rank) {
+    var card = document.createElement('article');
+    card.className = 'rank-guide-card ' + rankTierClass(rank.name);
+    card.innerHTML = '<div class="rank-guide-emblem">' + escapeHtml(rank.emblem) + '</div>' +
+      '<div><div class="rank-guide-name">' + escapeHtml(rank.name) + '</div>' +
+      '<div class="rank-guide-range">' + escapeHtml(rank.range) + '</div>' +
+      '<div class="rank-guide-desc">' + escapeHtml(rank.description) + '</div></div>';
+    grid.appendChild(card);
+  });
 }
 
 function rankProgressState(rank) {
@@ -3593,6 +3638,7 @@ function init() {
   initEventListeners();
   initModeToggle();
   updateRankedStatus();
+  renderRankGuide();
   initBackground();
   checkCurrentAccount();
 }

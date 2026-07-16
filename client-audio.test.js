@@ -79,7 +79,7 @@ function loadClientAudio() {
   };
   vm.createContext(context);
   vm.runInContext(match[1], context, { filename: 'client.html' });
-  return { Sound: context.Sound, rankProgressState: context.rankProgressState, document: context.document, storage: storage, audio: audio, html: html };
+  return { Sound: context.Sound, rankProgressState: context.rankProgressState, rankGuide: context.RANK_GUIDE, document: context.document, storage: storage, audio: audio, html: html };
 }
 
 function run() {
@@ -138,6 +138,14 @@ function run() {
   assert.ok(loaded.html.includes('id="home-rank-grid"'), 'home should include season rank cards');
   assert.ok(loaded.html.includes("fetch('/api/ranked-ladder?mode='"), 'leaderboard should load seasonal ranks directly');
   assert.strictEqual(loaded.html.includes('Global Records'), false, 'legacy records toggle should not be visible');
+  assert.strictEqual(loaded.rankGuide.length, 8, 'rank guide should explain all eight season ranks');
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(loaded.rankGuide.map(function (rank) { return rank.name; }))),
+    ['Number Novice', 'Times Apprentice', 'Multiply Warrior', 'Number Knight', 'Times Commander', 'Math Legend', 'Arena Hero', 'Times Immortal']
+  );
+  assert.ok(loaded.rankGuide[7].range.includes('2100+ RP'));
+  assert.ok(loaded.rankGuide[7].range.includes('Top 50'));
+  assert.ok(loaded.html.includes('Demotion Shield'), 'rank guide should explain demotion protection');
   console.log('client audio tests passed');
 }
 
