@@ -87,46 +87,20 @@ function run() {
   const Sound = loaded.Sound;
   assert.strictEqual(Sound.init(), true);
 
-  Sound.playMusic('menu');
-  assert.strictEqual(Sound.currentTrack, 'menu');
-  assert.ok(Sound.musicTimer, 'menu scheduler should be active');
-  assert.ok(loaded.audio.oscillators > 0, 'menu should schedule synth voices');
-
   const beforeMutedSfx = loaded.audio.oscillators;
   assert.strictEqual(Sound.toggleSfx(), false);
   Sound.tone(440, 0.1);
   assert.strictEqual(loaded.audio.oscillators, beforeMutedSfx, 'muted SFX should not create a tone');
-  assert.strictEqual(Sound.musicEnabled, true, 'muting SFX must not mute music');
-
-  assert.strictEqual(Sound.toggleMusic(), false);
-  assert.strictEqual(Sound.currentTrack, null);
-  assert.strictEqual(Sound.sfxEnabled, false, 'muting music must not alter SFX preference');
-  assert.strictEqual(loaded.storage.get('sifirMusicEnabled'), '0');
   assert.strictEqual(loaded.storage.get('sifirSfxEnabled'), '0');
 
   Sound.toggleSfx();
   const beforeEnabledSfx = loaded.audio.oscillators;
   Sound.tone(440, 0.1);
   assert.strictEqual(loaded.audio.oscillators, beforeEnabledSfx + 1);
-  Sound.toggleMusic();
-  assert.strictEqual(Sound.currentTrack, 'menu');
-
-  Sound.playMusic('battle', true);
-  assert.strictEqual(Sound.currentTrack, 'battle');
-  assert.strictEqual(Sound.musicTempoScale, 1);
-  Sound.finishBattle();
-  assert.strictEqual(Sound.resultMode, true);
-  assert.strictEqual(Sound.musicTempoScale, 0.68);
-
-  loaded.document.hidden = true;
-  Sound.pauseMusic();
-  assert.strictEqual(Sound.currentTrack, null);
-  loaded.document.hidden = false;
-  Sound.resumeMusic();
-  assert.strictEqual(Sound.currentTrack, 'battle');
-  assert.strictEqual(Sound.resultMode, true, 'result music state should survive tab visibility changes');
-
-  Sound.haltMusic();
+  assert.strictEqual(loaded.storage.get('sifirSfxEnabled'), '1');
+  assert.strictEqual(typeof Sound.playMusic, 'undefined', 'music engine should be removed');
+  assert.strictEqual(loaded.html.includes('id="music-toggle"'), false, 'music control should not be visible');
+  assert.strictEqual(loaded.html.includes('sifirMusicEnabled'), false, 'music preference should no longer be stored');
   assert.deepStrictEqual(
     JSON.parse(JSON.stringify(loaded.rankProgressState({ tier: 'Multiply Warrior', rp: 650 }))),
     { percent: 50, detail: '50 RP to next' }
