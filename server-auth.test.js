@@ -96,9 +96,8 @@ async function run() {
       method: 'PATCH', headers: { Cookie: otherCookie, Origin: base, 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId: accountBody.account.accountId, player: 'RoomHero', avatarKey: 'hero-fire', bio: 'Attempted overwrite' })
     });
-    assert.strictEqual(response.status, 200);
-    updatedProfileBody = await response.json();
-    assert.strictEqual(updatedProfileBody.profile.avatarKey, 'hero-fire');
+    assert.strictEqual(response.status, 403);
+    assert.strictEqual((await response.json()).error, 'Anda hanya boleh mengedit profil sendiri.');
     response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
     profileBody = await response.json();
     assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');

@@ -1716,6 +1716,13 @@ async function handleProfileRequest(req, res) {
     if (req.method === 'PATCH') {
       if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
       const body = await readJsonBody(req, 4 * 1024);
+      const requestedProfileId = body && body.profileId ? leaderboard.normalizeProfileId(body.profileId) : null;
+      const requestedPlayerName = body && typeof body.player === 'string' ? body.player.trim() : '';
+      if ((body && body.profileId && requestedProfileId !== account.accountId) ||
+          (requestedPlayerName && requestedPlayerName.toLowerCase() !== account.playerName.toLowerCase())) {
+        sendJson(res, 403, { error: 'Anda hanya boleh mengedit profil sendiri.' });
+        return;
+      }
       const updated = await leaderboard.updateProfile(account.accountId, body);
       sendJson(res, 200, { profile: updated });
       return;

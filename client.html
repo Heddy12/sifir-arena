@@ -598,7 +598,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .profile-search{display:flex;gap:7px;margin:14px 0;}.profile-search input,.profile-edit textarea,.profile-edit select{flex:1;background:var(--bg-card-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit;font-size:.7rem;box-sizing:border-box;}.profile-search button,.profile-save{border:1px solid var(--neon-green);border-radius:7px;background:rgba(0,255,136,.1);color:var(--neon-green);font:inherit;font-size:.62rem;font-weight:bold;padding:9px 13px;cursor:pointer;}
 .profile-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0;}.profile-tab{padding:9px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg-card-2);color:var(--text-dim);font:inherit;font-size:.59rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}.profile-tab.active{border-color:var(--neon-cyan);color:var(--neon-cyan);}
 .profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}.profile-card{background:var(--bg-card-2);border:1px solid var(--border);border-radius:9px;padding:12px;min-height:52px;}.profile-card-label{color:var(--text-dim);font-size:.55rem;text-transform:uppercase;letter-spacing:.7px}.profile-card-value{color:var(--text);font-size:.78rem;font-weight:bold;margin-top:6px;line-height:1.4}.profile-rank{border-color:rgba(255,230,0,.35)}
-.profile-history{display:grid;gap:7px}.history-row{display:grid;grid-template-columns:85px 1fr 80px 68px;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:9px 4px;font-size:.62rem}.history-win{color:var(--neon-green)}.history-loss{color:var(--neon-red)}.profile-state{text-align:center;color:var(--text-dim);padding:30px 10px;font-size:.74rem}.profile-edit{display:grid;grid-template-columns:150px 1fr auto;gap:8px;margin:10px 0}.profile-badges{display:flex;gap:7px;flex-wrap:wrap}.profile-badge{border:1px solid rgba(255,230,0,.4);color:var(--neon-yellow);padding:7px;border-radius:7px;font-size:.56rem;text-transform:capitalize}
+.profile-history{display:grid;gap:7px}.history-row{display:grid;grid-template-columns:85px 1fr 80px 68px;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:9px 4px;font-size:.62rem}.history-win{color:var(--neon-green)}.history-loss{color:var(--neon-red)}.profile-state{text-align:center;color:var(--text-dim);padding:30px 10px;font-size:.74rem}.profile-edit{display:grid;grid-template-columns:150px 1fr auto;gap:8px;margin:10px 0}.profile-edit[hidden]{display:none!important}.profile-badges{display:flex;gap:7px;flex-wrap:wrap}.profile-badge{border:1px solid rgba(255,230,0,.4);color:var(--neon-yellow);padding:7px;border-radius:7px;font-size:.56rem;text-transform:capitalize}
 
 @media(max-width:600px){
   .leaderboard-panel{padding:16px 12px;}
@@ -1462,6 +1462,10 @@ function renderProfile() {
 }
 
 function saveProfile() {
+  if (!STATE.profileData || !STATE.profileData.isOwner) {
+    alert('Anda hanya boleh mengedit profil sendiri.');
+    return;
+  }
   fetch('/api/profile',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({avatarKey:document.getElementById('profile-avatar-select').value,bio:document.getElementById('profile-bio-input').value.trim()})})
     .then(function(r){return r.json().catch(function(){return {};}).then(function(b){if(!r.ok)throw new Error(b.error||'Unable to save profile');return b;});})
     .then(function(){openProfile(STATE.account.playerName);}).catch(function(e){alert(e.message);});

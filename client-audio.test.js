@@ -162,6 +162,8 @@ function run() {
   assert.ok(loaded.html.includes('Demotion Shield'), 'rank guide should explain demotion protection');
   assert.strictEqual(loaded.html.includes('Placement Rank'), false, 'rank should be visible immediately without placement');
   assert.ok(loaded.html.includes('edit.hidden = !p.isOwner'), 'profile editor should only be visible to its owner');
+  assert.ok(loaded.html.includes('.profile-edit[hidden]{display:none!important}'), 'profile editor CSS must respect the hidden state');
+  assert.ok(loaded.html.includes('!STATE.profileData.isOwner'), 'profile save should reject non-owner views');
   assert.ok(loaded.html.includes("STATE.matchType === 'quick'"), 'Quick Match result should use the next-opponent flow');
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
   assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
