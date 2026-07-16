@@ -45,6 +45,7 @@ async function run() {
   process.env.NODE_ENV = 'test';
   process.env.QUICK_MATCH_WAIT_MS = '60';
   process.env.QUICK_MATCH_START_DELAY_MS = '30';
+  process.env.RANKED_RECONNECT_GRACE_MS = '1000';
 
   const memoryDb = newDb({ noAstCoverageCheck: true });
   const memoryPg = memoryDb.adapters.createPg();
@@ -84,7 +85,18 @@ async function run() {
     const starts = await Promise.all([startA, startB]);
     assert.strictEqual(starts[0].settings.timer, 6);
     assert.strictEqual(starts[1].players.length, 2);
-    playerA.close();
+    const reconnectNotice = waitForMessage(playerB, 'opponentReconnecting');
+    playerA.terminate();
+    assert.strictEqual((await reconnectNotice).graceSeconds, 1);
+    const reconnectedA = new WebSocket(base.replace('http:', 'ws:'), { headers: { Cookie: cookieA } });
+    const reconnectConnected = waitForMessage(reconnectedA, 'connected');
+    const resumed = waitForMessage(reconnectedA, 'matchResume');
+    await reconnectConnected;
+    const resumeState = await resumed;
+    assert.strictEqual(resumeState.players.length, 2);
+    assert.strictEqual(resumeState.settings.timer, 6);
+    sockets.push(reconnectedA);
+    reconnectedA.send(JSON.stringify({ type: 'leaveRoom' }));
     playerB.close();
 
     const cookieC = await register(base, 'Charlie');

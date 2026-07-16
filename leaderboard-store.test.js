@@ -53,6 +53,45 @@ async function run() {
     function (error) { return error.code === 'PLAYER_NAME_TAKEN'; }
   );
 
+  let profile = await store.getPlayerProfile('Hero_Test', registered.account.accountId);
+  assert.strictEqual(profile.isOwner, true);
+  assert.strictEqual(profile.player.name, 'Hero_Test');
+  assert.strictEqual(profile.progression.level, 1);
+  assert.deepStrictEqual(Object.keys(profile.ranks).sort(), ['multiplayer', 'solo', 'sprint']);
+  await store.updateProfile(registered.account.accountId, { avatarKey: 'hero-gold', bio: 'Learning every table!' });
+  profile = await store.getPlayerProfile('Hero_Test', registered.account.accountId);
+  assert.strictEqual(profile.player.avatarKey, 'hero-gold');
+  assert.strictEqual(profile.player.bio, 'Learning every table!');
+  await assert.rejects(
+    store.updateProfile(registered.account.accountId, { avatarKey: 'hero-blue', bio: 'email me at hero@example.com' }),
+    function (error) { return error.code === 'INVALID_BIO'; }
+  );
+
+  const rankedMatch = await store.recordCompletedMatch({
+    matchId: 'match_profile_test_001', mode: 'multiplayer', matchType: 'quick', ranked: true,
+    settings: { timer: 6, sifir: 0, difficulty: 'random' }, durationSeconds: 45,
+    participants: [
+      { profileId: registered.account.accountId, name: 'Hero_Test', winner: true, score: 80, correct: 8, wrong: 1, tableStats: [{ table: 7, correct: 5, wrong: 1 }], cardUsage: { shield: 1 } },
+      { profileId: botCatalog.BOT_PROFILES[0].profileId, name: botCatalog.BOT_PROFILES[0].name, winner: false, isBot: true, score: 40, correct: 4, wrong: 3 }
+    ]
+  });
+  assert.strictEqual(rankedMatch.recorded, true);
+  assert.strictEqual(rankedMatch.rankResults.length, 2);
+  const duplicateMatch = await store.recordCompletedMatch({
+    matchId: 'match_profile_test_001', mode: 'multiplayer', matchType: 'quick', ranked: true,
+    participants: [{ profileId: registered.account.accountId, name: 'Hero_Test', winner: true }]
+  });
+  assert.strictEqual(duplicateMatch.duplicate, true);
+  profile = await store.getPlayerProfile('Hero_Test', 'another-viewer');
+  assert.strictEqual(profile.isOwner, false);
+  assert.strictEqual(profile.history.length, 1);
+  assert.strictEqual(profile.history[0].opponentName, botCatalog.BOT_PROFILES[0].name);
+  assert.strictEqual(profile.modes.multiplayer.gamesPlayed, 1);
+  assert.strictEqual(profile.tables[0].table, 7);
+  assert.ok(profile.progression.xp > 0);
+  const ladder = await store.getRankedLadder('multiplayer', 50);
+  assert.ok(ladder.entries.some(function (entry) { return entry.name === 'Hero_Test'; }));
+
   const playerA = { profileId: 'device_player_a', name: 'Same Name' };
   const playerB = { profileId: 'device_player_b', name: 'Same Name' };
 

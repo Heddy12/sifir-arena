@@ -26,6 +26,8 @@ const AUTH_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_MAX_ATTEMPTS = 10;
 const AUTH_IP_MAX_ATTEMPTS = 100;
 const authAttempts = new Map();
+const disconnectedPlayers = new Map();
+const soloSessions = new Map();
 
 /* ==================== CONSTANTS ==================== */
 const SPRINT_DURATION = 60;
@@ -39,6 +41,7 @@ const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
+const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONNECT_GRACE_MS) || 30000);
 const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
 
 leaderboard.initialize().then(function (ready) {
@@ -152,6 +155,10 @@ function getLearningReports(room) {
   return room.gameState.players.map(buildLearningReport);
 }
 
+function cryptoRandomId() {
+  return Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+}
+
 function normalizeSettings(settings) {
   const source = settings && typeof settings === 'object' ? settings : {};
   const timer = Number(source.timer);
@@ -217,13 +224,27 @@ function recordRoomLeaderboard(room, winnerIdx) {
   if (!room || room.leaderboardRecorded) return;
   room.leaderboardRecorded = true;
   const mode = room.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
-  if (!isRankedRoom(room)) {
-    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: false, recorded: false, reason: 'custom-settings' });
-    return;
-  }
+  const ranked = isRankedRoom(room);
+  const completedParticipants = room.players.map(function (playerId, index) {
+    const profile = leaderboardProfile(playerId);
+    const stats = room.gameState.players[index];
+    if (!profile || !stats) return null;
+    return {
+      playerId: playerId,
+      profileId: profile.profileId,
+      name: profile.name,
+      winner: index === winnerIdx,
+      isBot: !!players[playerId].isBot,
+      score: stats.score,
+      correct: stats.correct,
+      wrong: stats.wrong,
+      tableStats: buildLearningReport(stats),
+      cardUsage: stats.cardUsage || {}
+    };
+  }).filter(Boolean);
 
-  let operation;
-  if (mode === 'sprint') {
+  let leaderboardOperation = Promise.resolve(null);
+  if (ranked && mode === 'sprint') {
     const writes = room.players.map(function (playerId, index) {
       const profile = leaderboardProfile(playerId);
       const stats = room.gameState.players[index];
@@ -236,56 +257,94 @@ function recordRoomLeaderboard(room, winnerIdx) {
         accuracy: attempts > 0 ? Math.round((stats.correct / attempts) * 100) : 0
       });
     });
-    operation = Promise.all(writes);
-  } else {
+    leaderboardOperation = Promise.all(writes);
+  } else if (ranked) {
     const participants = room.players.map(function (playerId, index) {
       const profile = leaderboardProfile(playerId);
       if (!profile) return null;
       profile.winner = index === winnerIdx;
       return profile;
     }).filter(Boolean);
-    operation = leaderboard.recordMultiplayerGame(participants);
+    leaderboardOperation = leaderboard.recordMultiplayerGame(participants);
   }
 
-  operation.then(function () {
-    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: true, recorded: true });
+  const profileOperation = leaderboard.recordCompletedMatch({
+    matchId: room.matchId || ('match_' + cryptoRandomId()),
+    mode: mode,
+    matchType: room.matchType === 'quick' ? 'quick' : 'room',
+    ranked: ranked,
+    settings: room.settings,
+    durationSeconds: room.startedAt ? (Date.now() - room.startedAt) / 1000 : 0,
+    participants: completedParticipants
+  });
+
+  Promise.all([leaderboardOperation, profileOperation]).then(function (results) {
+    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: ranked, recorded: true, reason: ranked ? null : 'custom-settings' });
+    const progress = results[1];
+    (progress.rankResults || []).forEach(function (rankResult) {
+      const participant = completedParticipants.find(function (item) { return item.profileId === rankResult.profileId; });
+      if (participant) sendToPlayer(participant.playerId, Object.assign({ type: 'rankResult', mode: mode, ranked: ranked }, rankResult));
+    });
   }).catch(function (error) {
-    console.error('Leaderboard result was not saved:', error.message);
-    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: true, recorded: false, reason: 'database-unavailable' });
+    console.error('Battle profile result was not saved:', error.message);
+    broadcast(room, { type: 'leaderboardResult', mode: mode, eligible: ranked, recorded: false, reason: 'database-unavailable' });
   });
 }
 
+function startSoloSession(playerId, message) {
+  const player = players[playerId];
+  if (!player) return;
+  const source = message && message.settings ? message.settings : {};
+  const settings = normalizeSettings({ timer: source.timer, sifir: source.sifir, difficulty: source.difficulty, gameMode: 'ffa' });
+  settings.gameMode = 'solo';
+  const sessionId = 'ss_' + cryptoRandomId();
+  soloSessions.set(player.accountId, { sessionId: sessionId, settings: settings, startedAt: Date.now(), used: false });
+  sendToPlayer(playerId, { type: 'soloSessionStarted', sessionId: sessionId, settings: settings });
+}
+
 function submitSoloLeaderboardResult(playerId, message) {
+  const player = players[playerId];
   const profile = leaderboardProfile(playerId);
-  const settings = message && message.settings;
+  const session = player && soloSessions.get(player.accountId);
+  const settings = session && session.settings;
   const stats = normalizeResultStats(message && message.stats);
-  if (!profile) {
+  if (!profile || !session || session.used || message.sessionId !== session.sessionId) {
     sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'profile-required' });
-    return;
-  }
-  if (!message.won) {
-    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: false, recorded: false, reason: 'win-required' });
-    return;
-  }
-  if (!isRankedSettings(settings, 'solo')) {
-    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: false, recorded: false, reason: 'custom-settings' });
     return;
   }
   if (!stats) {
     sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'invalid-result' });
     return;
   }
-  leaderboard.recordBest(profile, 'solo', stats).then(function (result) {
+  session.used = true;
+  const ranked = isRankedSettings(settings, 'solo');
+  const won = !!message.won;
+  const profileOperation = leaderboard.recordCompletedMatch({
+    matchId: 'solo_' + session.sessionId,
+    mode: 'solo', matchType: 'solo', ranked: ranked, settings: settings,
+    durationSeconds: (Date.now() - session.startedAt) / 1000,
+    participants: [{
+      profileId: profile.profileId, name: profile.name, winner: won, isBot: false,
+      score: stats.score, correct: stats.correct, wrong: stats.wrong,
+      tableStats: message.tableStats, cardUsage: message.cardUsage
+    }]
+  });
+  const recordOperation = won && ranked ? leaderboard.recordBest(profile, 'solo', stats) : Promise.resolve({ improved: false });
+  Promise.all([recordOperation, profileOperation]).then(function (results) {
+    const result = results[0];
     sendToPlayer(playerId, {
       type: 'leaderboardResult',
       mode: 'solo',
-      eligible: true,
+      eligible: ranked && won,
       recorded: true,
-      improved: result.improved
+      improved: result.improved,
+      reason: ranked ? (won ? null : 'win-required') : 'custom-settings'
     });
+    const rankResult = results[1].rankResults && results[1].rankResults[0];
+    if (rankResult) sendToPlayer(playerId, Object.assign({ type: 'rankResult', mode: 'solo', ranked: ranked }, rankResult));
   }).catch(function (error) {
-    console.error('Solo leaderboard result was not saved:', error.message);
-    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: true, recorded: false, reason: 'database-unavailable' });
+    console.error('Solo profile result was not saved:', error.message);
+    sendToPlayer(playerId, { type: 'leaderboardResult', mode: 'solo', eligible: ranked && won, recorded: false, reason: 'database-unavailable' });
   });
 }
 
@@ -397,11 +456,21 @@ function createBotOpponent(profile) {
   return botId;
 }
 
-function fallbackQuickMatchToBot(playerId) {
+async function fallbackQuickMatchToBot(playerId) {
   const entry = removeQuickMatchEntry(playerId);
   const player = players[playerId];
   if (!entry || !player || player.roomCode) return;
-  const profile = botCatalog.chooseBot();
+  let profile = botCatalog.chooseBot();
+  try {
+    const rankedMode = entry.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
+    const snapshots = await Promise.all(botCatalog.BOT_PROFILES.map(function (bot) { return leaderboard.getRankSnapshot(bot.profileId, rankedMode); }));
+    let closestDistance = Infinity;
+    snapshots.forEach(function (snapshot, index) {
+      const distance = Math.abs(Number(snapshot && snapshot.rp || 600) - Number(entry.rp || 600));
+      if (distance < closestDistance) { closestDistance = distance; profile = botCatalog.BOT_PROFILES[index]; }
+    });
+  } catch (error) {}
+  if (!players[playerId] || players[playerId].roomCode) return;
   const botId = createBotOpponent(profile);
   const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode);
   if (!room) {
@@ -410,10 +479,16 @@ function fallbackQuickMatchToBot(playerId) {
   }
 }
 
-function requestQuickMatch(playerId, requestedMode) {
+async function requestQuickMatch(playerId, requestedMode) {
   const player = players[playerId];
-  const gameMode = requestedMode === 'sprint' ? 'sprint' : 'ffa';
   if (!player) return;
+  const gameMode = requestedMode === 'sprint' ? 'sprint' : 'ffa';
+  let playerRp = 600;
+  try {
+    const snapshot = await leaderboard.getRankSnapshot(player.profileId, gameMode === 'sprint' ? 'sprint' : 'multiplayer');
+    playerRp = Number(snapshot && snapshot.rp) || 600;
+  } catch (error) {}
+  if (!players[playerId] || players[playerId].roomCode) return;
   if (player.roomCode) {
     sendToPlayer(playerId, { type: 'quickMatchError', error: 'Leave your current room before starting Quick Match.' });
     return;
@@ -435,7 +510,12 @@ function requestQuickMatch(playerId, requestedMode) {
       quickMatchQueue.splice(index, 1);
     }
   }
-  const opponentIndex = quickMatchQueue.findIndex(function (entry) { return entry.playerId !== playerId && entry.gameMode === gameMode; });
+  const opponentIndex = quickMatchQueue.findIndex(function (entry) {
+    if (entry.playerId === playerId || entry.gameMode !== gameMode) return false;
+    const elapsed = Date.now() - entry.queuedAt;
+    const range = elapsed < 4000 ? 150 : 300;
+    return Math.abs(Number(entry.rp || 600) - playerRp) <= range;
+  });
   const opponentEntry = opponentIndex === -1 ? null : quickMatchQueue.splice(opponentIndex, 1)[0];
 
   if (opponentEntry) {
@@ -444,7 +524,7 @@ function requestQuickMatch(playerId, requestedMode) {
     return;
   }
 
-  const entry = { playerId: playerId, gameMode: gameMode, timeout: null };
+  const entry = { playerId: playerId, gameMode: gameMode, rp: playerRp, queuedAt: Date.now(), timeout: null };
   entry.timeout = setTimeout(function () { fallbackQuickMatchToBot(playerId); }, QUICK_MATCH_WAIT_MS);
   quickMatchQueue.push(entry);
   sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
@@ -454,7 +534,11 @@ function startBattle(room) {
   if (!room.players.every(function (playerId) { return !!players[playerId]; })) return;
   if (room.gameMode === 'sprint') { startSprint(room); return; }
   clearBotActionTimers(room);
+  room.matchId = 'match_' + cryptoRandomId();
+  room.startedAt = Date.now();
   room.leaderboardRecorded = false;
+  room.forcedWinnerIdx = null;
+  room.paused = false;
   room.timerFrozen = false;
   room.questionVersion++;
   const p1Id = room.players[0];
@@ -466,8 +550,8 @@ function startBattle(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {}, tableStats: {} },
-      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {}, tableStats: {} }
+      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p1Cards, activeEffects: {}, tableStats: {}, cardUsage: {} },
+      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: p2Cards, activeEffects: {}, tableStats: {}, cardUsage: {} }
     ]
   };
 
@@ -604,14 +688,15 @@ function scheduleBotTurn(room) {
   }, responseDelay));
 }
 
-function startTimer(room) {
+function startTimer(room, duration) {
   clearInterval(room.timerInterval);
-  room.timeLeft = room.settings.timer;
+  const timerDuration = Number(duration) > 0 ? Number(duration) : room.settings.timer;
+  room.timeLeft = timerDuration;
   const startTime = Date.now();
   room.questionStartTime = startTime;
 
   room.timerInterval = setInterval(function () {
-    room.timeLeft = room.settings.timer - (Date.now() - startTime) / 1000;
+    room.timeLeft = timerDuration - (Date.now() - startTime) / 1000;
     if (room.timeLeft <= 0) {
       room.timeLeft = 0;
       clearInterval(room.timerInterval);
@@ -826,6 +911,7 @@ function handleCardActivate(room, playerId, cardIdx) {
   }
 
   card.used = true;
+  player.cardUsage[card.id] = (player.cardUsage[card.id] || 0) + 1;
   broadcast(room, cardResult);
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
   if (checkWin(room)) return;
@@ -862,7 +948,11 @@ function handleCardActivate(room, playerId, cardIdx) {
 function startSprint(room) {
   if (room.sprintInterval) clearInterval(room.sprintInterval);
   clearBotActionTimers(room);
+  room.matchId = 'match_' + cryptoRandomId();
+  room.startedAt = Date.now();
   room.leaderboardRecorded = false;
+  room.forcedWinnerIdx = null;
+  room.paused = false;
   room.timerFrozen = false;
   const sprintDuration = room.settings.sprintTime || SPRINT_DURATION;
   const p1Id = room.players[0];
@@ -870,8 +960,8 @@ function startSprint(room) {
 
   room.gameState = {
     players: [
-      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} },
-      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {} }
+      { name: players[p1Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {}, cardUsage: {} },
+      { name: players[p2Id].name, hp: BASE_HP, maxHP: BASE_HP, score: 0, streak: 0, correct: 0, wrong: 0, cards: [], activeEffects: {}, tableStats: {}, cardUsage: {} }
     ]
   };
 
@@ -1025,7 +1115,8 @@ function endSprint(room) {
   const p0 = room.gameState.players[0];
   const p1 = room.gameState.players[1];
   let winnerIdx;
-  if (p0.correct > p1.correct) winnerIdx = 0;
+  if (room.forcedWinnerIdx === 0 || room.forcedWinnerIdx === 1) winnerIdx = room.forcedWinnerIdx;
+  else if (p0.correct > p1.correct) winnerIdx = 0;
   else if (p1.correct > p0.correct) winnerIdx = 1;
   else {
     // Tie on correct — use accuracy
@@ -1122,6 +1213,139 @@ function handleDisconnect(playerId) {
   setTimeout(function () {
     destroyRoom(roomCode);
   }, 5000);
+}
+
+function pauseRoomForReconnect(room, playerId) {
+  if (!room || room.paused || !room.battleActive) return;
+  room.paused = true;
+  room.disconnectedPlayerId = playerId;
+  room.battleActive = false;
+  room.pausedTimeLeft = Math.max(0.1, Number(room.timeLeft) || Number(room.settings.timer) || 20);
+  room.pausedSprintTimeLeft = Math.max(1, Number(room.sprintTimeLeft) || Number(room.settings.sprintTime) || SPRINT_DURATION);
+  stopTimer(room);
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  clearBotActionTimers(room);
+  broadcast(room, { type: 'opponentReconnecting', graceSeconds: Math.ceil(RANKED_RECONNECT_GRACE_MS / 1000) });
+}
+
+function startSprintClock(room, duration) {
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  const sprintDuration = Math.max(1, Math.ceil(Number(duration) || SPRINT_DURATION));
+  const sprintStart = Date.now();
+  room.sprintTimeLeft = sprintDuration;
+  room.sprintInterval = setInterval(function () {
+    if (!room.battleActive) return;
+    room.sprintTimeLeft = sprintDuration - Math.floor((Date.now() - sprintStart) / 1000);
+    if (room.sprintTimeLeft <= 0) {
+      room.sprintTimeLeft = 0;
+      clearInterval(room.sprintInterval);
+      endSprint(room);
+      return;
+    }
+    broadcast(room, { type: 'sprintTick', timeLeft: room.sprintTimeLeft });
+  }, 1000);
+}
+
+function resumeRoomAfterReconnect(room, playerId) {
+  if (!room || !room.paused || room.disconnectedPlayerId !== playerId) return;
+  room.paused = false;
+  room.disconnectedPlayerId = null;
+  room.battleActive = true;
+  const idx = players[playerId].playerIdx;
+  sendToPlayer(playerId, {
+    type: 'matchResume',
+    you: idx,
+    gameMode: room.gameMode,
+    settings: room.settings,
+    players: room.gameState.players,
+    yourCards: room.gameState.players[idx].cards || [],
+    round: room.round,
+    currentPlayer: room.currentPlayer,
+    question: room.currentQuestion ? { a: room.currentQuestion.a, b: room.currentQuestion.b, isWeak: room.currentQuestion.isWeak } : null,
+    timer: room.pausedTimeLeft,
+    sprint: room.gameMode === 'sprint',
+    sprintTimeLeft: room.pausedSprintTimeLeft
+  });
+  broadcast(room, { type: 'opponentReconnected' });
+  if (room.gameMode === 'sprint') {
+    startSprintClock(room, room.pausedSprintTimeLeft);
+    for (let i = 0; i < 2; i++) {
+      if (room.sprintQuestions[i]) {
+        sendToPlayer(room.players[i], { type: 'newTurn', round: 0, currentPlayer: i, question: { a: room.sprintQuestions[i].a, b: room.sprintQuestions[i].b }, timer: room.settings.timer, sprint: true });
+        scheduleBotSprintAnswer(room, i);
+      } else sendSprintQuestion(room, i);
+    }
+  } else if (room.currentQuestion) {
+    startTimer(room, room.pausedTimeLeft);
+    broadcast(room, { type: 'newTurn', round: room.round, currentPlayer: room.currentPlayer, question: { a: room.currentQuestion.a, b: room.currentQuestion.b, isWeak: room.currentQuestion.isWeak }, timer: room.pausedTimeLeft, resumed: true });
+    scheduleBotTurn(room);
+  } else {
+    nextTurn(room);
+  }
+}
+
+function forfeitRankedMatch(playerId, preserveConnection) {
+  const player = players[playerId];
+  const room = player && rooms[player.roomCode];
+  if (!room || !room.gameState || room.leaderboardRecorded) return handleDisconnect(playerId);
+  const loserIdx = player.playerIdx;
+  room.paused = false;
+  room.disconnectedPlayerId = null;
+  room.battleActive = true;
+  if (room.gameMode === 'sprint') {
+    room.forcedWinnerIdx = 1 - loserIdx;
+    endSprint(room);
+  } else {
+    room.gameState.players[loserIdx].hp = 0;
+    checkWin(room);
+  }
+  if (preserveConnection && players[playerId]) players[playerId].roomCode = null;
+  setTimeout(function () {
+    room.players.forEach(function (pid) { if (players[pid]) { players[pid].roomCode = null; players[pid].playerIdx = 0; } });
+    destroyRoom(room.code);
+    if (!preserveConnection) delete players[playerId];
+  }, 5000);
+}
+
+function handleSocketDisconnect(playerId, immediateForfeit) {
+  const player = players[playerId];
+  if (!player) return;
+  if (!immediateForfeit && player.accountId && disconnectedPlayers.has(player.accountId) && !player.ws) return;
+  cancelQuickMatch(playerId, false);
+  const room = player.roomCode ? rooms[player.roomCode] : null;
+  if (room && room.battleActive && isRankedRoom(room) && !player.isBot) {
+    player.ws = null;
+    if (immediateForfeit) return forfeitRankedMatch(playerId, false);
+    pauseRoomForReconnect(room, playerId);
+    const existing = disconnectedPlayers.get(player.accountId);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(function () {
+      disconnectedPlayers.delete(player.accountId);
+      forfeitRankedMatch(playerId, false);
+    }, RANKED_RECONNECT_GRACE_MS);
+    disconnectedPlayers.set(player.accountId, { playerId: playerId, timer: timer });
+    return;
+  }
+  handleDisconnect(playerId);
+}
+
+function leavePlayerRoom(playerId) {
+  const player = players[playerId];
+  if (!player) return;
+  cancelQuickMatch(playerId, false);
+  const room = player.roomCode ? rooms[player.roomCode] : null;
+  if (!room) { player.roomCode = null; return; }
+  if (room.battleActive && isRankedRoom(room)) {
+    forfeitRankedMatch(playerId, true);
+    return;
+  }
+  room.battleActive = false;
+  stopTimer(room); clearBotActionTimers(room);
+  if (room.sprintInterval) clearInterval(room.sprintInterval);
+  broadcast(room, { type: 'opponentLeft' });
+  room.players.forEach(function (pid) { if (players[pid]) { players[pid].roomCode = null; players[pid].playerIdx = 0; } });
+  player.roomCode = null;
+  destroyRoom(room.code);
 }
 
 /* ==================== MESSAGING ==================== */
@@ -1275,8 +1499,50 @@ function authErrorStatus(error) {
   if (error.code === 'INVALID_CREDENTIALS') return 401;
   if (error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN') return 409;
   if (error.code === 'LEADERBOARD_UNAVAILABLE') return 503;
+  if (error.code === 'PROFILE_NOT_FOUND') return 404;
   if (String(error.code || '').startsWith('INVALID_') || error.code === 'BODY_TOO_LARGE') return 400;
   return 500;
+}
+
+async function handleProfileRequest(req, res) {
+  try {
+    const account = await leaderboard.getAccountBySession(sessionToken(req));
+    if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+    if (req.method === 'GET') {
+      const requestUrl = new URL(req.url, 'http://localhost');
+      const playerName = requestUrl.searchParams.get('player') || account.playerName;
+      const profile = await leaderboard.getPlayerProfile(playerName, account.accountId);
+      if (!profile) { sendJson(res, 404, { error: 'Profile tidak ditemui.' }); return; }
+      sendJson(res, 200, { profile: profile });
+      return;
+    }
+    if (req.method === 'PATCH') {
+      if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
+      const body = await readJsonBody(req, 4 * 1024);
+      const updated = await leaderboard.updateProfile(account.accountId, body);
+      sendJson(res, 200, { profile: updated });
+      return;
+    }
+    sendJson(res, 405, { error: 'Method not allowed' });
+  } catch (error) {
+    const status = authErrorStatus(error);
+    sendJson(res, status, { error: status >= 500 ? 'Profile tidak tersedia buat sementara.' : error.message });
+  }
+}
+
+async function handleRankedLadderRequest(req, res) {
+  if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
+  try {
+    const account = await leaderboard.getAccountBySession(sessionToken(req));
+    if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+    const requestUrl = new URL(req.url, 'http://localhost');
+    const mode = requestUrl.searchParams.get('mode') || 'multiplayer';
+    const limit = Math.max(1, Math.min(Number(requestUrl.searchParams.get('limit')) || 10, 50));
+    const ladder = await leaderboard.getRankedLadder(mode, limit);
+    sendJson(res, 200, Object.assign({ mode: mode }, ladder));
+  } catch (error) {
+    sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 400, { error: error.message || 'Ranked ladder tidak tersedia.' });
+  }
 }
 
 async function handleAuthRequest(req, res, urlPath) {
@@ -1377,6 +1643,14 @@ const server = http.createServer(function (req, res) {
     handleLeaderboardRequest(req, res);
     return;
   }
+  if (urlPath === '/api/profile') {
+    handleProfileRequest(req, res);
+    return;
+  }
+  if (urlPath === '/api/ranked-ladder') {
+    handleRankedLadderRequest(req, res);
+    return;
+  }
   if (['/api/register', '/api/login', '/api/logout', '/api/me'].includes(urlPath)) {
     handleAuthRequest(req, res, urlPath);
     return;
@@ -1403,17 +1677,29 @@ wss.on('connection', async function connection(ws, req) {
     ws.close(4001, 'Login required');
     return;
   }
-  const playerId = generatePlayerId();
-  players[playerId] = {
-    ws: ws,
-    name: account.playerName,
-    profileId: account.accountId,
-    accountId: account.accountId,
-    roomCode: null,
-    playerIdx: 0
-  };
+  let playerId;
+  const reconnect = disconnectedPlayers.get(account.accountId);
+  if (reconnect && players[reconnect.playerId]) {
+    playerId = reconnect.playerId;
+    clearTimeout(reconnect.timer);
+    disconnectedPlayers.delete(account.accountId);
+    players[playerId].ws = ws;
+  } else {
+    playerId = generatePlayerId();
+    players[playerId] = {
+      ws: ws,
+      name: account.playerName,
+      profileId: account.accountId,
+      accountId: account.accountId,
+      roomCode: null,
+      playerIdx: 0
+    };
+  }
 
   sendToPlayer(playerId, { type: 'connected', playerId: playerId, playerName: account.playerName });
+  if (reconnect && players[playerId] && players[playerId].roomCode) {
+    resumeRoomAfterReconnect(rooms[players[playerId].roomCode], playerId);
+  }
 
   ws.on('message', function incoming(rawMessage) {
     if (!players[playerId]) return;
@@ -1433,6 +1719,10 @@ wss.on('connection', async function connection(ws, req) {
 
       case 'submitSoloResult':
         submitSoloLeaderboardResult(playerId, message);
+        break;
+
+      case 'startSoloSession':
+        startSoloSession(playerId, message);
         break;
 
       case 'quickMatch':
@@ -1523,17 +1813,19 @@ wss.on('connection', async function connection(ws, req) {
       }
 
       case 'leaveRoom':
-        handleDisconnect(playerId);
+        leavePlayerRoom(playerId);
         break;
     }
   });
 
   ws.on('close', function () {
-    handleDisconnect(playerId);
+    if (players[playerId] && players[playerId].ws && players[playerId].ws !== ws) return;
+    handleSocketDisconnect(playerId, false);
   });
 
   ws.on('error', function () {
-    handleDisconnect(playerId);
+    if (players[playerId] && players[playerId].ws && players[playerId].ws !== ws) return;
+    handleSocketDisconnect(playerId, false);
   });
 });
 

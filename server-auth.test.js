@@ -65,6 +65,21 @@ async function run() {
     assert.strictEqual(response.status, 200);
     assert.strictEqual((await response.json()).account.playerName, 'RoomHero');
 
+    response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    let profileBody = await response.json();
+    assert.strictEqual(profileBody.profile.player.name, 'RoomHero');
+    assert.strictEqual(profileBody.profile.isOwner, true);
+    assert.strictEqual(JSON.stringify(profileBody).includes('g-97558615@moe-dl.edu.my'), false);
+    response = await fetch(base + '/api/profile', {
+      method: 'PATCH', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatarKey: 'knight-cyan', bio: 'Training for the arena' })
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/ranked-ladder?mode=solo&limit=10', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    assert.ok(Array.isArray((await response.json()).entries));
+
     const socket = new WebSocket(base.replace('http:', 'ws:'), { headers: { Cookie: cookie } });
     const connectedPromise = waitForMessage(socket, 'connected');
     const connected = await connectedPromise;

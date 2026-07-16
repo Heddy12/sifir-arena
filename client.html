@@ -417,6 +417,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .auth-status.success{color:var(--neon-green);}
 .landing-account{display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid rgba(0,240,255,0.3);border-radius:9px;background:rgba(19,19,31,0.76);font-size:0.62rem;color:var(--text-dim);}
 .landing-account strong{color:var(--neon-cyan);letter-spacing:0.6px;}
+.profile-mini-btn{padding:6px 8px;border:1px solid var(--neon-cyan);border-radius:6px;background:rgba(0,240,255,0.08);color:var(--neon-cyan);font:inherit;font-size:0.55rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}
 .logout-btn{padding:6px 8px;border:1px solid var(--neon-red);border-radius:6px;background:rgba(255,46,99,0.08);color:var(--neon-red);font:inherit;font-size:0.55rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}
 
 @media(max-width:600px){
@@ -536,6 +537,26 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .leaderboard-player{font-weight:bold;color:var(--text);word-break:break-word;}
 .leaderboard-table tbody tr:nth-child(-n+3){background:rgba(255,230,0,0.035);}
 .leaderboard-note{font-size:0.62rem;color:var(--text-dim);text-align:center;margin-top:14px;}
+.leaderboard-view-toggle{display:flex;justify-content:center;gap:6px;margin:-6px 0 12px;}
+.leaderboard-view-btn{padding:7px 12px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text-dim);font:inherit;font-size:.58rem;text-transform:uppercase;cursor:pointer;}
+.leaderboard-view-btn.active{border-color:var(--neon-yellow);color:var(--neon-yellow);}
+.leaderboard-player{cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,240,255,.35);}
+
+/* ==================== PLAYER PROFILE ==================== */
+.profile-overlay{position:fixed;inset:0;background:rgba(7,7,12,.97);display:none;align-items:center;justify-content:center;z-index:1020;padding:18px;box-sizing:border-box;}
+.profile-overlay.show{display:flex;}
+.profile-panel{width:min(860px,97vw);max-height:92vh;overflow:auto;background:rgba(19,19,31,.98);border:1px solid var(--neon-cyan);border-radius:15px;padding:22px;box-shadow:0 0 38px rgba(0,240,255,.14);}
+.profile-header{display:flex;align-items:center;gap:14px;position:relative;}
+.profile-avatar{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;font-size:2rem;background:linear-gradient(135deg,rgba(0,240,255,.2),rgba(160,32,240,.25));border:2px solid var(--neon-cyan);}
+.profile-name{font-size:1.15rem;color:var(--text);font-weight:bold;letter-spacing:1px;}
+.profile-level{font-size:.65rem;color:var(--neon-yellow);margin-top:5px;}
+.profile-close{position:absolute;right:0;top:0;width:34px;height:34px;border:1px solid var(--border);border-radius:50%;background:var(--bg-card-2);color:var(--text);font-size:1.1rem;cursor:pointer;}
+.profile-bio{color:var(--text-dim);font-size:.7rem;line-height:1.6;margin:12px 0;}
+.profile-xp{height:8px;background:#25253d;border-radius:8px;overflow:hidden;margin:6px 0 14px;}.profile-xp span{display:block;height:100%;background:linear-gradient(90deg,var(--neon-cyan),var(--neon-green));}
+.profile-search{display:flex;gap:7px;margin:14px 0;}.profile-search input,.profile-edit textarea,.profile-edit select{flex:1;background:var(--bg-card-2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:10px;font:inherit;font-size:.7rem;box-sizing:border-box;}.profile-search button,.profile-save{border:1px solid var(--neon-green);border-radius:7px;background:rgba(0,255,136,.1);color:var(--neon-green);font:inherit;font-size:.62rem;font-weight:bold;padding:9px 13px;cursor:pointer;}
+.profile-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0;}.profile-tab{padding:9px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg-card-2);color:var(--text-dim);font:inherit;font-size:.59rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}.profile-tab.active{border-color:var(--neon-cyan);color:var(--neon-cyan);}
+.profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}.profile-card{background:var(--bg-card-2);border:1px solid var(--border);border-radius:9px;padding:12px;min-height:52px;}.profile-card-label{color:var(--text-dim);font-size:.55rem;text-transform:uppercase;letter-spacing:.7px}.profile-card-value{color:var(--text);font-size:.78rem;font-weight:bold;margin-top:6px;line-height:1.4}.profile-rank{border-color:rgba(255,230,0,.35)}
+.profile-history{display:grid;gap:7px}.history-row{display:grid;grid-template-columns:85px 1fr 80px 68px;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:9px 4px;font-size:.62rem}.history-win{color:var(--neon-green)}.history-loss{color:var(--neon-red)}.profile-state{text-align:center;color:var(--text-dim);padding:30px 10px;font-size:.74rem}.profile-edit{display:grid;grid-template-columns:150px 1fr auto;gap:8px;margin:10px 0}.profile-badges{display:flex;gap:7px;flex-wrap:wrap}.profile-badge{border:1px solid rgba(255,230,0,.4);color:var(--neon-yellow);padding:7px;border-radius:7px;font-size:.56rem;text-transform:capitalize}
 
 @media(max-width:600px){
   .leaderboard-panel{padding:16px 12px;}
@@ -544,6 +565,8 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
   .leaderboard-table{font-size:0.7rem;}
   .leaderboard-table th,.leaderboard-table td{padding:9px 5px;}
   .winner-buttons{flex-wrap:wrap;justify-content:center;}
+  .landing-account{flex-wrap:wrap;justify-content:center;}
+  .profile-panel{padding:15px 11px}.profile-grid{grid-template-columns:repeat(2,1fr)}.profile-tabs{grid-template-columns:repeat(2,1fr)}.profile-edit{grid-template-columns:1fr}.history-row{grid-template-columns:64px 1fr 58px;font-size:.55rem}.history-row span:nth-child(4){display:none}
 }
 
 /* ==================== BACKGROUND RESPONSIVE ==================== */
@@ -664,7 +687,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 <div class="landing-screen" id="landing-screen">
   <img class="landing-title" src="images/title.png" alt="Times Table Hero Arena" onerror="this.style.display='none';">
   <div class="landing-tagline">Math Power. Battle Arena.</div>
-  <div class="landing-account"><span>Player ID: <strong id="account-player-name">-</strong></span><button class="logout-btn" id="logout-btn" type="button">Logout</button></div>
+  <div class="landing-account"><span>Player ID: <strong id="account-player-name">-</strong></span><button class="profile-mini-btn" id="profile-open-btn" type="button">Profile</button><button class="logout-btn" id="logout-btn" type="button">Logout</button></div>
 
   <div class="landing-features">
     <div class="feature-card" data-mode="ffa">
@@ -915,9 +938,39 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <button class="leaderboard-tab" data-leaderboard-mode="multiplayer">Multiplayer</button>
       <button class="leaderboard-tab" data-leaderboard-mode="sprint">Sprint</button>
     </div>
+    <div class="leaderboard-view-toggle">
+      <button class="leaderboard-view-btn active" data-leaderboard-view="records">Global Records</button>
+      <button class="leaderboard-view-btn" data-leaderboard-view="ranked">Season Rank</button>
+    </div>
     <div class="leaderboard-preset">Ranked: Room/Solo 20s, Multiplayer Quick Match 6s, Sprint 60s. All Tables dan Random.</div>
     <div id="leaderboard-content" aria-live="polite"></div>
     <div class="leaderboard-note">Top 10 global. Rekod disimpan pada akaun pemain anda.</div>
+  </div>
+</div>
+
+<!-- PLAYER PROFILE OVERLAY -->
+<div class="profile-overlay" id="profile-overlay" role="dialog" aria-modal="true" aria-labelledby="profile-name">
+  <div class="profile-panel">
+    <div class="profile-header">
+      <div class="profile-avatar" id="profile-avatar">&#9876;</div>
+      <div><div class="profile-name" id="profile-name">Player</div><div class="profile-level" id="profile-level">Level 1</div></div>
+      <button class="profile-close" id="profile-close" aria-label="Close profile">&times;</button>
+    </div>
+    <div class="profile-bio" id="profile-bio"></div>
+    <div class="profile-xp"><span id="profile-xp-bar" style="width:0%"></span></div>
+    <div class="profile-edit" id="profile-edit" hidden>
+      <select id="profile-avatar-select"></select>
+      <textarea id="profile-bio-input" maxlength="80" rows="2" placeholder="Write a short bio (no links or email)"></textarea>
+      <button class="profile-save" id="profile-save">Save Profile</button>
+    </div>
+    <div class="profile-search"><input id="profile-search-input" maxlength="20" placeholder="Find Player ID"><button id="profile-search-btn">Find Player</button></div>
+    <div class="profile-tabs">
+      <button class="profile-tab active" data-profile-tab="overview">Overview</button>
+      <button class="profile-tab" data-profile-tab="battlefield">Battlefield</button>
+      <button class="profile-tab" data-profile-tab="statistics">Statistics</button>
+      <button class="profile-tab" data-profile-tab="history">History</button>
+    </div>
+    <div id="profile-content" aria-live="polite"></div>
   </div>
 </div>
 
@@ -952,8 +1005,19 @@ var STATE = {
   quickMatchInterval: null,
   learningStats: {},
   leaderboardMode: 'solo',
-  leaderboardRequestId: 0
+  leaderboardRequestId: 0,
+  leaderboardView: 'records',
+  profileData: null,
+  profileTab: 'overview',
+  soloSessionId: null,
+  soloCardUsage: {}
 };
+
+function escapeHtml(value) {
+  return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function (char) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char];
+  });
+}
 
 function setAuthStatus(message, type) {
   var status = document.getElementById('auth-status');
@@ -1173,7 +1237,10 @@ function renderLeaderboard(mode, entries) {
       var cell = document.createElement('td');
       cell.textContent = column.value(entry);
       if (index === 0) cell.className = 'leaderboard-rank';
-      if (index === 1) cell.className = 'leaderboard-player';
+      if (index === 1) {
+        cell.className = 'leaderboard-player';
+        cell.addEventListener('click', function () { closeLeaderboard(); openProfile(entry.name); });
+      }
       row.appendChild(cell);
     });
     body.appendChild(row);
@@ -1191,7 +1258,9 @@ function loadLeaderboard(mode) {
   loading.textContent = 'Loading leaderboard...';
   content.appendChild(loading);
 
-  fetch('/api/leaderboard?mode=' + encodeURIComponent(mode) + '&limit=10', { cache: 'no-store' })
+  var ranked = STATE.leaderboardView === 'ranked';
+  var endpoint = ranked ? '/api/ranked-ladder?mode=' : '/api/leaderboard?mode=';
+  fetch(endpoint + encodeURIComponent(mode) + '&limit=10', { cache: 'no-store', credentials: 'same-origin' })
     .then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (body) {
         if (!response.ok) throw new Error(body.error || 'Unable to load leaderboard');
@@ -1200,7 +1269,7 @@ function loadLeaderboard(mode) {
     })
     .then(function (body) {
       if (requestId !== STATE.leaderboardRequestId || mode !== STATE.leaderboardMode) return;
-      renderLeaderboard(mode, body.entries);
+      if (ranked) renderRankedLadder(mode, body); else renderLeaderboard(mode, body.entries);
     })
     .catch(function (error) {
       if (requestId !== STATE.leaderboardRequestId || mode !== STATE.leaderboardMode) return;
@@ -1210,6 +1279,91 @@ function loadLeaderboard(mode) {
       failed.textContent = error.message || 'Leaderboard is temporarily unavailable.';
       content.appendChild(failed);
     });
+}
+
+function renderRankedLadder(mode, body) {
+  var content = document.getElementById('leaderboard-content');
+  content.textContent = '';
+  var entries = body && body.entries;
+  if (!entries || !entries.length) {
+    content.innerHTML = '<div class="leaderboard-state">No seasonal rank yet.</div>';
+    return;
+  }
+  var table = document.createElement('table');
+  table.className = 'leaderboard-table';
+  table.innerHTML = '<thead><tr><th>Rank</th><th>Player</th><th>Tier</th><th>RP</th></tr></thead>';
+  var tbody = document.createElement('tbody');
+  entries.forEach(function (entry) {
+    var row = document.createElement('tr');
+    var values = ['#' + entry.rank, entry.name, entry.provisional ? 'Placement (' + entry.placementGames + '/5)' : entry.tier + (entry.division ? ' ' + entry.division : ''), entry.rp];
+    values.forEach(function (value, index) {
+      var cell = document.createElement('td'); cell.textContent = value;
+      if (index === 0) cell.className = 'leaderboard-rank';
+      if (index === 1) { cell.className = 'leaderboard-player'; cell.addEventListener('click', function () { closeLeaderboard(); openProfile(entry.name); }); }
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody); content.appendChild(table);
+  if (body.season) {
+    var note = document.createElement('div'); note.className = 'leaderboard-note';
+    note.textContent = 'Season ' + body.season.number + ' ends ' + new Date(body.season.endsAt).toLocaleDateString();
+    content.appendChild(note);
+  }
+}
+
+var PROFILE_AVATARS = { 'hero-blue':'&#9876;', 'hero-red':'&#128293;', 'hero-green':'&#127793;', 'hero-gold':'&#128081;', 'mage-purple':'&#10024;', 'knight-cyan':'&#128737;', 'ninja-pink':'&#127922;', 'robot-orange':'&#129302;' };
+var BADGE_NAMES = { 'first-victory':'First Victory', 'ten-wins':'10 Wins', 'fifty-wins':'50 Wins', 'hundred-battles':'100 Battles', 'hot-streak':'Hot Streak', 'perfect-battle':'Perfect Match', 'sprint-star':'Sprint Star', 'times-master':'Times Master' };
+
+function closeProfile() { document.getElementById('profile-overlay').classList.remove('show'); }
+function openProfile(playerName) {
+  var name = playerName || (STATE.account && STATE.account.playerName);
+  if (!name) return;
+  closeLeaderboard();
+  document.getElementById('profile-overlay').classList.add('show');
+  document.getElementById('profile-content').innerHTML = '<div class="profile-state">Loading player profile...</div>';
+  fetch('/api/profile?player=' + encodeURIComponent(name), { cache:'no-store', credentials:'same-origin' })
+    .then(function (response) { return response.json().catch(function(){return {};}).then(function(body){ if(!response.ok) throw new Error(body.error || 'Profile unavailable'); return body; }); })
+    .then(function (body) { STATE.profileData = body.profile || body; renderProfile(); })
+    .catch(function (error) { document.getElementById('profile-content').innerHTML = '<div class="profile-state">' + escapeHtml(error.message) + '</div>'; });
+}
+
+function profileCard(label, value, cls) { return '<div class="profile-card ' + (cls || '') + '"><div class="profile-card-label">' + escapeHtml(label) + '</div><div class="profile-card-value">' + escapeHtml(String(value)) + '</div></div>'; }
+function modeTitle(mode) { return mode === 'solo' ? 'Solo Mastery' : mode === 'sprint' ? 'Sprint Blitz' : 'Multiplayer Arena'; }
+function renderProfile() {
+  var p = STATE.profileData; if (!p) return;
+  document.getElementById('profile-name').textContent = p.player.name;
+  document.getElementById('profile-avatar').innerHTML = PROFILE_AVATARS[p.player.avatarKey] || PROFILE_AVATARS['hero-blue'];
+  document.getElementById('profile-level').textContent = 'Level ' + p.progression.level + ' · ' + p.progression.xp + ' XP';
+  document.getElementById('profile-bio').textContent = p.player.bio || 'Ready to master the Times Tables Arena.';
+  document.getElementById('profile-xp-bar').style.width = p.progression.currentLevelXp + '%';
+  var edit = document.getElementById('profile-edit'); edit.hidden = !p.isOwner;
+  if (p.isOwner) {
+    var select = document.getElementById('profile-avatar-select'); select.textContent = '';
+    p.avatarOptions.forEach(function(key){ var o=document.createElement('option');o.value=key;o.textContent=key.replace(/-/g,' ');o.selected=key===p.player.avatarKey;select.appendChild(o); });
+    document.getElementById('profile-bio-input').value = p.player.bio || '';
+  }
+  document.querySelectorAll('.profile-tab').forEach(function(tab){ tab.classList.toggle('active', tab.getAttribute('data-profile-tab') === STATE.profileTab); });
+  var html = '';
+  if (STATE.profileTab === 'overview') {
+    html = '<div class="profile-grid">' + profileCard('Battles',p.overview.totalGames) + profileCard('Victories',p.overview.totalWins) + profileCard('Win Rate',p.overview.winRate+'%') + profileCard('Accuracy',p.overview.accuracy+'%') + profileCard('Best Streak',p.overview.bestWinStreak) + profileCard('Season','Season '+p.season.number) + '</div>';
+    html += '<div class="profile-grid" style="margin-top:9px">'; ['solo','multiplayer','sprint'].forEach(function(mode){var r=p.ranks[mode];html+=profileCard(modeTitle(mode),(r.provisional?'Placement '+r.placementGames+'/5':r.tier+(r.division?' '+r.division:''))+' · '+r.rp+' RP','profile-rank');}); html += '</div>';
+    html += '<div class="profile-badges" style="margin-top:12px">' + (p.badges.length ? p.badges.map(function(b){return '<span class="profile-badge">'+escapeHtml(BADGE_NAMES[b.key]||b.key)+'</span>';}).join('') : '<span class="profile-state">No badges yet</span>') + '</div>';
+  } else if (STATE.profileTab === 'battlefield') {
+    html = '<div class="profile-grid">'; ['solo','multiplayer','sprint'].forEach(function(mode){var m=p.modes[mode]; html += profileCard(modeTitle(mode),m.wins+'W / '+m.losses+'L · '+m.winRate+'%');}); html += profileCard('Recent Form',(p.recentForm||[]).map(function(x){return x==='win'?'W':'L';}).join(' ')||'-') + profileCard('Strongest Table',p.strongestTable?'Table '+p.strongestTable.table+' · '+p.strongestTable.accuracy+'%':'-') + profileCard('Weakest Table',p.weakestTable?'Table '+p.weakestTable.table+' · '+p.weakestTable.accuracy+'%':'-') + '</div>';
+  } else if (STATE.profileTab === 'statistics') {
+    html = '<div class="profile-grid">' + profileCard('Correct',p.overview.correct) + profileCard('Wrong',p.overview.wrong) + profileCard('Accuracy',p.overview.accuracy+'%') + profileCard('Favourite Mode',p.favoriteMode?modeTitle(p.favoriteMode):'-') + profileCard('Favourite Card',p.favoriteCard?p.favoriteCard.cardId.replace(/([A-Z])/g,' $1'):'-') + profileCard('Current Streak',p.overview.currentWinStreak) + '</div>';
+    if (p.tables.length) html += '<div class="profile-grid" style="margin-top:9px">' + p.tables.map(function(t){return profileCard('Table '+t.table,t.accuracy+'% · '+t.correct+'/'+t.attempts);}).join('') + '</div>';
+  } else {
+    html = '<div class="profile-history">' + (p.history.length ? p.history.map(function(h){return '<div class="history-row"><strong class="history-'+escapeHtml(h.result)+'">'+escapeHtml(h.result.toUpperCase())+'</strong><span>'+escapeHtml(modeTitle(h.mode))+' vs '+escapeHtml(h.opponentName||'Times Tower')+'</span><span>'+h.accuracy+'%</span><span>'+(h.ranked?((h.rankDelta>=0?'+':'')+h.rankDelta+' RP'):'Unranked')+'</span></div>';}).join('') : '<div class="profile-state">No completed battles yet.</div>') + '</div>';
+  }
+  document.getElementById('profile-content').innerHTML = html;
+}
+
+function saveProfile() {
+  fetch('/api/profile',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({avatarKey:document.getElementById('profile-avatar-select').value,bio:document.getElementById('profile-bio-input').value.trim()})})
+    .then(function(r){return r.json().catch(function(){return {};}).then(function(b){if(!r.ok)throw new Error(b.error||'Unable to save profile');return b;});})
+    .then(function(){openProfile(STATE.account.playerName);}).catch(function(e){alert(e.message);});
 }
 
 var CARD_POOL = [
@@ -1755,6 +1909,7 @@ function startSoloGame() {
   STATE.currentPlayer = 0;
   STATE.currentQuestion = null;
   STATE.learningStats = {};
+  STATE.soloCardUsage = {};
   clearWeakTableReport();
   STATE.players = [
     { name: document.getElementById('player-name').value.trim() || 'Hero', hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: playerCards, activeEffects: {} },
@@ -1991,23 +2146,12 @@ function soloCheckWin() {
         '<div class="winner-stat"><div class="ws-label">Accuracy</div><div class="ws-value" style="color:var(--neon-yellow)">' + acc + '%</div></div>';
       renderWeakTableReport(buildLearningReportFromStats(STATE.learningStats));
       var soloRanked = isRankedSettingsClient(STATE.settings, 'solo');
-      if (winnerIdx === 0 && soloRanked) {
-        setWinnerRankedStatus('Ranked result is being saved...', '');
-        send({
-          type: 'submitSoloResult',
-          won: true,
-          settings: STATE.settings,
-          stats: {
-            score: players[0].score,
-            correct: players[0].correct,
-            wrong: players[0].wrong
-          }
-        });
-      } else if (winnerIdx === 0) {
-        setWinnerRankedStatus('Unranked - custom settings do not affect the leaderboard.', 'error');
-      } else {
-        setWinnerRankedStatus('Win a ranked Solo Quest to enter the leaderboard.', 'error');
-      }
+      setWinnerRankedStatus(soloRanked ? 'Saving battle result and rank...' : 'Saving unranked battle history...', '');
+      send({
+        type: 'submitSoloResult', sessionId: STATE.soloSessionId, won: winnerIdx === 0,
+        stats: { score: players[0].score, correct: players[0].correct, wrong: players[0].wrong },
+        tableStats: buildLearningReportFromStats(STATE.learningStats), cardUsage: STATE.soloCardUsage
+      });
       document.getElementById('winner-overlay').classList.add('show');
 
       // Save high score to localStorage
@@ -2032,6 +2176,7 @@ function soloActivateCard(cardIdx) {
   var player = STATE.players[0];
   var card = player.cards[cardIdx];
   if (!card || card.used) return;
+  STATE.soloCardUsage[card.id] = (STATE.soloCardUsage[card.id] || 0) + 1;
 
   showPowerEffect(card.id, 0);
   Sound.cardActivate();
@@ -2287,19 +2432,20 @@ function resetQuickMatchUI() {
 function handleMessage(msg) {
   switch (msg.type) {
     case 'connected':
-      var hadRemoteSession = !!STATE.roomCode || STATE.battleActive;
       STATE.playerId = msg.playerId;
       if (msg.playerName) {
         document.getElementById('player-name').value = msg.playerName;
         document.getElementById('account-player-name').textContent = msg.playerName;
       }
-      if (hadRemoteSession) {
-        resetRemoteSession();
-        setConnectStatus('Reconnected. Please create or join a new room.', 'success');
-      }
       send({
         type: 'setName'
       });
+      break;
+
+    case 'soloSessionStarted':
+      STATE.soloSessionId = msg.sessionId;
+      if (msg.settings) STATE.settings = msg.settings;
+      startSoloGame();
       break;
 
     case 'roomCreated':
@@ -2390,6 +2536,32 @@ function handleMessage(msg) {
         magicSections.forEach(function (el) { el.style.display = 'none'; });
       }
       showVSOverlay();
+      break;
+
+    case 'matchResume':
+      resetQuickMatchUI();
+      applyAuthoritativeRoomState(msg);
+      STATE.you = msg.you; STATE.players = msg.players; STATE.yourCards = msg.yourCards || [];
+      STATE.battleActive = true; STATE.isSprint = msg.gameMode === 'sprint'; STATE.round = msg.round || 0; STATE.currentPlayer = msg.currentPlayer;
+      document.getElementById('disconnect-overlay').classList.remove('show');
+      document.getElementById('bg-layer').style.display = 'none'; document.getElementById('warriors-bg').style.display = 'none';
+      document.getElementById('connect-screen').style.display = 'none'; document.getElementById('landing-screen').classList.add('hide');
+      document.getElementById('game-layout').classList.add('show'); document.getElementById('header-info').classList.add('show'); document.getElementById('btn-exit').classList.add('show');
+      if (STATE.isSprint) { STATE.sprintTimeLeft = msg.sprintTimeLeft; document.getElementById('sprint-timer').classList.add('show'); }
+      updateAllUI(); Sound.playMusic('battle');
+      break;
+
+    case 'opponentReconnecting':
+      document.getElementById('feedback-msg').textContent = 'Opponent reconnecting... ' + (msg.graceSeconds || 30) + 's grace period';
+      document.getElementById('feedback-msg').className = 'feedback-msg timeout';
+      stopTimerDisplay();
+      break;
+
+    case 'opponentReconnected':
+      if (STATE.battleActive) {
+        document.getElementById('feedback-msg').textContent = 'Opponent reconnected. Battle resumed!';
+        document.getElementById('feedback-msg').className = 'feedback-msg correct';
+      }
       break;
 
     case 'newTurn':
@@ -2619,6 +2791,12 @@ function handleMessage(msg) {
       }
       break;
 
+    case 'rankResult':
+      var rankText = (msg.ranked ? ((msg.delta >= 0 ? '+' : '') + msg.delta + ' RP · ' + msg.after + ' RP') : 'Unranked') + ' · +' + (msg.xpAwarded || 0) + ' XP';
+      if (msg.tier) rankText += ' · ' + msg.tier + (msg.division ? ' ' + msg.division : '');
+      setWinnerRankedStatus(rankText, msg.delta >= 0 ? 'success' : 'error');
+      break;
+
     case 'opponentLeft':
       STATE.battleActive = false;
       stopTimerDisplay();
@@ -2841,7 +3019,7 @@ function startCountdown(callback) {
 /* ==================== GO HOME ==================== */
 function goHome() {
   if (STATE.quickMatchSearching) send({ type: 'cancelQuickMatch' });
-  if (STATE.ws && STATE.ws.readyState === WebSocket.OPEN) STATE.ws.close();
+  if (STATE.roomCode && STATE.roomCode !== 'SOLO' && !STATE.quickMatchSearching) send({ type: 'leaveRoom' });
   stopTimerDisplay();
   resetQuickMatchUI();
   STATE.roomCode = null;
@@ -2862,6 +3040,7 @@ function goHome() {
   document.getElementById('disconnect-overlay').classList.remove('show');
   document.getElementById('countdown-overlay').classList.remove('show');
   closeLeaderboard();
+  closeProfile();
   setWinnerRankedStatus('', '');
   document.getElementById('sprint-timer').classList.remove('show', 'warning');
   document.getElementById('connect-status').textContent = '';
@@ -3262,7 +3441,7 @@ function initEventListeners() {
     var settings = getCurrentSettings('solo');
     STATE.settings = settings;
     send({ type: 'setName' });
-    startSoloGame();
+    send({ type: 'startSoloSession', settings: settings });
   });
 
   ['setting-timer', 'setting-sifir', 'setting-difficulty', 'setting-sprinttime'].forEach(function (id) {
@@ -3289,6 +3468,20 @@ function initEventListeners() {
   document.getElementById('leaderboard-overlay').addEventListener('click', function (e) {
     if (e.target === this) closeLeaderboard();
   });
+  document.querySelectorAll('.leaderboard-view-btn').forEach(function (button) {
+    button.addEventListener('click', function () {
+      STATE.leaderboardView = this.getAttribute('data-leaderboard-view');
+      document.querySelectorAll('.leaderboard-view-btn').forEach(function (item) { item.classList.toggle('active', item.getAttribute('data-leaderboard-view') === STATE.leaderboardView); });
+      loadLeaderboard(STATE.leaderboardMode);
+    });
+  });
+  document.getElementById('profile-open-btn').addEventListener('click', function () { Sound.click(); openProfile(); });
+  document.getElementById('profile-close').addEventListener('click', closeProfile);
+  document.getElementById('profile-overlay').addEventListener('click', function(e){ if(e.target===this) closeProfile(); });
+  document.querySelectorAll('.profile-tab').forEach(function(tab){ tab.addEventListener('click',function(){STATE.profileTab=this.getAttribute('data-profile-tab');renderProfile();}); });
+  document.getElementById('profile-search-btn').addEventListener('click', function(){openProfile(document.getElementById('profile-search-input').value.trim());});
+  document.getElementById('profile-search-input').addEventListener('keydown', function(e){if(e.key==='Enter')openProfile(this.value.trim());});
+  document.getElementById('profile-save').addEventListener('click', saveProfile);
 
   // Attack button
   document.getElementById('btn-attack').addEventListener('click', function () {
@@ -3345,6 +3538,7 @@ function initEventListeners() {
     if (e.key === 'Escape') {
       document.getElementById('info-overlay').classList.remove('show');
       closeLeaderboard();
+      closeProfile();
     }
   });
 
@@ -3355,7 +3549,7 @@ function initEventListeners() {
     document.getElementById('winner-overlay').classList.remove('show');
     setWinnerRankedStatus('', '');
     if (STATE.gameMode === 'solo') {
-      startSoloGame();
+      send({ type: 'startSoloSession', settings: STATE.settings });
     } else {
       send({ type: 'rematch' });
     }
