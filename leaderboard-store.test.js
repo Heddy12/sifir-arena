@@ -19,23 +19,23 @@ async function run() {
   assert.strictEqual(await store.initialize(), true);
 
   const registered = await store.registerAccount({
-    email: 'Hero.Test@gmail.com',
+    email: 'G-97558615@moe-dl.edu.my',
     password: 'secure-pass-123',
     playerName: 'Hero_Test'
   });
-  assert.strictEqual(registered.account.email, 'hero.test@gmail.com');
+  assert.strictEqual(registered.account.email, 'g-97558615@moe-dl.edu.my');
   assert.strictEqual(registered.account.playerName, 'Hero_Test');
   assert.ok(registered.token.length >= 32);
   assert.deepStrictEqual(await store.getAccountBySession(registered.token), registered.account);
 
-  const loggedIn = await store.loginAccount({ email: 'hero.test@gmail.com', password: 'secure-pass-123' });
+  const loggedIn = await store.loginAccount({ email: 'g-97558615@moe-dl.edu.my', password: 'secure-pass-123' });
   assert.strictEqual(loggedIn.account.accountId, registered.account.accountId);
   await assert.rejects(
-    store.loginAccount({ email: 'hero.test@gmail.com', password: 'wrong-password' }),
+    store.loginAccount({ email: 'g-97558615@moe-dl.edu.my', password: 'wrong-password' }),
     function (error) { return error.code === 'INVALID_CREDENTIALS'; }
   );
   await assert.rejects(
-    store.registerAccount({ email: 'hero.test@gmail.com', password: 'another-pass-123', playerName: 'DifferentHero' }),
+    store.registerAccount({ email: 'g-97558615@moe-dl.edu.my', password: 'another-pass-123', playerName: 'DifferentHero' }),
     function (error) { return error.code === 'EMAIL_TAKEN'; }
   );
   await assert.rejects(
@@ -44,7 +44,8 @@ async function run() {
   );
   assert.strictEqual(await store.logoutSession(loggedIn.token), true);
   assert.strictEqual(await store.getAccountBySession(loggedIn.token), null);
-  assert.strictEqual(store.normalizeEmail('not-gmail@example.com'), null);
+  assert.strictEqual(store.normalizeEmail('teacher@example.com'), 'teacher@example.com');
+  assert.strictEqual(store.normalizeEmail('not-an-email'), null);
   assert.strictEqual(store.normalizePlayerName('bad name'), null);
 
   const playerA = { profileId: 'device_player_a', name: 'Same Name' };

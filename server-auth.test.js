@@ -50,7 +50,7 @@ async function run() {
     let response = await fetch(base + '/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: base },
-      body: JSON.stringify({ email: 'integration.hero@gmail.com', password: 'secure-pass-123', playerName: 'RoomHero' })
+      body: JSON.stringify({ email: 'g-97558615@moe-dl.edu.my', password: 'secure-pass-123', playerName: 'RoomHero' })
     });
     assert.strictEqual(response.status, 201);
     const accountBody = await response.json();

@@ -61,7 +61,7 @@ git push -u origin main
 8. You'll get a URL like: `https://sifir-arena.onrender.com`
 
 ### Step 3: Play!
-1. Both players register with Gmail/password and choose a unique Player ID
+1. Both players register with an email/password and choose a unique Player ID
 2. Laptop 1: Login → **Multiplayer** → **Create Room** → share room code
 3. Laptop 2: Login → **Multiplayer** → type room code → **Join Room**
 4. Battle starts automatically!

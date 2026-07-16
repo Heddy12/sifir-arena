@@ -33,7 +33,8 @@ function normalizeName(value) {
 
 function normalizeEmail(value) {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/.test(email) && email.length <= 254 ? email : null;
+  const valid = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(email);
+  return valid && email.length <= 254 ? email : null;
 }
 
 function normalizePlayerName(value) {
@@ -161,7 +162,7 @@ async function registerAccount(input) {
   const email = normalizeEmail(input && input.email);
   const playerName = normalizePlayerName(input && input.playerName);
   const password = normalizePassword(input && input.password);
-  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat Gmail yang sah.');
+  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
   if (!playerName) throw authError('INVALID_PLAYER_NAME', 'Player ID mesti 3-20 aksara: huruf, nombor atau _.');
   if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
 
@@ -179,7 +180,7 @@ async function registerAccount(input) {
       [email, playerName.toLowerCase()]
     );
     if (existing.rows.some(function (row) { return row.email === email; })) {
-      throw authError('EMAIL_TAKEN', 'Alamat Gmail itu sudah didaftarkan.');
+      throw authError('EMAIL_TAKEN', 'Alamat emel itu sudah didaftarkan.');
     }
     if (existing.rows.some(function (row) { return row.player_name_key === playerName.toLowerCase(); })) {
       throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
@@ -199,7 +200,7 @@ async function registerAccount(input) {
     if (error.code === '23505') {
       const detail = String(error.constraint || error.detail || '').toLowerCase();
       if (detail.includes('player_name')) throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
-      throw authError('EMAIL_TAKEN', 'Alamat Gmail itu sudah didaftarkan.');
+      throw authError('EMAIL_TAKEN', 'Alamat emel itu sudah didaftarkan.');
     }
     if (error.code && (error.code.startsWith('INVALID_') || error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN')) throw error;
     throw unavailableError(error.message);
@@ -211,7 +212,7 @@ async function registerAccount(input) {
 async function loginAccount(input) {
   const email = normalizeEmail(input && input.email);
   const password = normalizePassword(input && input.password);
-  if (!email || !password) throw authError('INVALID_CREDENTIALS', 'Gmail atau kata laluan tidak betul.');
+  if (!email || !password) throw authError('INVALID_CREDENTIALS', 'Emel atau kata laluan tidak betul.');
 
   await ensureSchema();
   const result = await getPool().query(
@@ -224,7 +225,7 @@ async function loginAccount(input) {
   const expected = row ? row.password_hash : '0'.repeat(128);
   const actual = await hashPassword(password, salt);
   const matches = crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
-  if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Gmail atau kata laluan tidak betul.');
+  if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Emel atau kata laluan tidak betul.');
 
   const db = getPool();
   const client = await db.connect();
