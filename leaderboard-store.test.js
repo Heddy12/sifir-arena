@@ -161,7 +161,7 @@ async function run() {
 
   const rankedMatch = await store.recordCompletedMatch({
     matchId: 'match_profile_test_001', mode: 'multiplayer', matchType: 'quick', ranked: true,
-    settings: { timer: 6, sifir: 0, difficulty: 'random' }, durationSeconds: 45,
+    settings: { timer: 3, sifir: 0, difficulty: 'random' }, durationSeconds: 45,
     participants: [
       { profileId: registered.account.accountId, name: 'Hero_Test', winner: true, score: 80, correct: 8, wrong: 1, tableStats: [{ table: 7, correct: 5, wrong: 1 }], cardUsage: { shield: 1 } },
       { profileId: botCatalog.BOT_PROFILES[0].profileId, name: botCatalog.BOT_PROFILES[0].name, winner: false, isBot: true, score: 40, correct: 4, wrong: 3 }

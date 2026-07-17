@@ -73,7 +73,7 @@ git push -u origin main
 
 ### Create Room
 1. Register or login; your unique Player ID becomes your in-game name
-2. Select timer (4s/6s/8s/10s), sifir (1-12 or All), difficulty
+2. Single Player and Multiplayer use a fixed 3-second answer timer; select tables and difficulty
 3. Click **Create Room**
 4. Share the 6-character room code with opponent
 
@@ -132,7 +132,7 @@ git push -u origin main
 
 - Open the trophy button on the landing page or result screen
 - Separate rankings are available for Single Player, Multiplayer, and Sprint
-- Ranked preset: All Tables and Random difficulty, with a 20s timer for Single Player/Multiplayer and one unified 60s timer for Sprint
+- Ranked preset: All Tables and Random difficulty, with a 3s answer timer for Single Player/Multiplayer and one unified 60s timer for Sprint
 - Custom settings remain playable but are marked **Unranked**
 - Single Player stores the best winning score, Sprint stores the best individual result, and Multiplayer counts wins and games played
 - PostgreSQL is required for account login and gameplay; a temporary database outage blocks new game sessions safely

@@ -206,11 +206,14 @@ async function run() {
     const connected = await connectedPromise;
     assert.strictEqual(connected.playerName, 'RoomHero');
     socket.send(JSON.stringify({ type: 'setName', name: 'Imposter', profileId: 'device_imposter' }));
+    const soloSessionPromise = waitForMessage(socket, 'soloSessionStarted');
+    socket.send(JSON.stringify({ type: 'startSoloSession', settings: { timer: 20, sifir: 0, difficulty: 'random' } }));
+    assert.strictEqual((await soloSessionPromise).settings.timer, 3, 'Single Player must always use a 3-second answer timer');
     const createdPromise = waitForMessage(socket, 'roomCreated');
     socket.send(JSON.stringify({ type: 'createRoom', settings: { timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa' } }));
     const created = await createdPromise;
     assert.match(created.code, /^[A-Z0-9]{6}$/);
-    assert.strictEqual(created.settings.timer, 6, 'Multiplayer Create Room must always use a 6-second answer timer');
+    assert.strictEqual(created.settings.timer, 3, 'Multiplayer Create Room must always use a 3-second answer timer');
     socket.close();
 
     const rejectedSocket = new WebSocket(base.replace('http:', 'ws:'));

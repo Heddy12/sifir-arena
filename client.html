@@ -635,7 +635,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
   <div class="subtitle" id="header-subtitle">MULTIPLAYER - FIGHTER EDITION</div>
   <div class="header-info" id="header-info">
     <div class="chip">Room: <span id="hdr-room">-</span></div>
-    <div class="chip">Timer: <span id="hdr-timer">20s</span></div>
+    <div class="chip">Timer: <span id="hdr-timer">3s</span></div>
     <div class="chip">Round: <span id="hdr-round">0</span></div>
   </div>
 </header>
@@ -839,11 +839,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <div class="connect-label">Game Settings</div>
       <div class="settings-row" id="game-settings-row">
         <select id="setting-timer">
-          <option value="4">4s Timer</option>
-          <option value="6">6s Timer</option>
-          <option value="8">8s Timer</option>
-          <option value="10">10s Timer</option>
-          <option value="20" selected>20s Timer</option>
+          <option value="3" selected>3s Timer</option>
         </select>
         <select id="setting-sifir">
           <option value="0" selected>All Tables</option>
@@ -875,7 +871,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the season leaderboard.</div>
     <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
-    <div class="quick-match-note" id="quick-match-note">Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching for another player. Ranked: All Tables · Random · 6s.</div>
+    <div class="quick-match-note" id="quick-match-note">Search for an available opponent for 5 seconds. Ranked: All Tables · Random · 3s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -1030,7 +1026,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
       <button class="leaderboard-tab" data-leaderboard-mode="multiplayer">Multiplayer</button>
       <button class="leaderboard-tab" data-leaderboard-mode="sprint">Sprint</button>
     </div>
-    <div class="leaderboard-preset">Ranked: Room/Solo 20s, Multiplayer Quick Match 6s, Sprint 60s. All Tables and Random.</div>
+    <div class="leaderboard-preset">Ranked: Single Player and Multiplayer 3s, Sprint 60s. All Tables and Random.</div>
     <div id="leaderboard-content" aria-live="polite"></div>
     <div class="leaderboard-note">Current season Top 10. Each mode has a separate ranking.</div>
     <section class="rank-guide" aria-labelledby="rank-guide-title">
@@ -1314,7 +1310,7 @@ function getCurrentSettings(mode) {
   var selectedMode = mode || STATE.gameMode;
   var sprintDuration = parseInt(document.getElementById('setting-sprinttime').value);
   return {
-    timer: selectedMode === 'sprint' ? sprintDuration : (selectedMode === 'ffa' ? 6 : parseInt(document.getElementById('setting-timer').value)),
+    timer: selectedMode === 'sprint' ? sprintDuration : 3,
     sifir: parseInt(document.getElementById('setting-sifir').value),
     difficulty: document.getElementById('setting-difficulty').value,
     gameMode: selectedMode,
@@ -1326,8 +1322,8 @@ function isRankedSettingsClient(settings, mode) {
   if (!settings) return false;
   if (Number(settings.sifir) !== 0 || settings.difficulty !== 'random') return false;
   if (mode === 'sprint') return Number(settings.timer) === 60 && Number(settings.sprintTime) === 60;
-  if (mode === 'ffa' || mode === 'multiplayer') return Number(settings.timer) === 6;
-  return Number(settings.timer) === 20;
+  if (mode === 'ffa' || mode === 'multiplayer') return Number(settings.timer) === 3;
+  return Number(settings.timer) === 3;
 }
 
 function updateRankedStatus() {
@@ -2436,19 +2432,13 @@ function applyModeState(mode) {
   var isSolo = mode === 'solo';
   var supportsQuickMatch = mode === 'ffa' || mode === 'sprint';
   var timerSelect = document.getElementById('setting-timer');
-  if (mode === 'ffa') {
-    if (timerSelect.value !== '6') timerSelect.dataset.nonMultiplayerValue = timerSelect.value;
-    timerSelect.value = '6';
-    timerSelect.disabled = true;
-  } else {
-    if (timerSelect.dataset.nonMultiplayerValue) timerSelect.value = timerSelect.dataset.nonMultiplayerValue;
-    timerSelect.disabled = false;
-  }
+  timerSelect.value = '3';
+  timerSelect.disabled = mode !== 'sprint';
   document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
-    ? 'Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching again. Ranked: All Tables · Random · 60s Sprint.'
-    : 'Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching again. Ranked: All Tables · Random · 6s.';
+    ? 'Search for an available opponent for 5 seconds. Ranked: All Tables · Random · 60s Sprint.'
+    : 'Search for an available opponent for 5 seconds. Ranked: All Tables · Random · 3s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -2481,7 +2471,7 @@ function setModeControlsLocked(locked) {
   ['setting-sifir', 'setting-difficulty', 'setting-sprinttime'].forEach(function (id) {
     document.getElementById(id).disabled = !!locked;
   });
-  document.getElementById('setting-timer').disabled = !!locked || STATE.gameMode === 'ffa';
+  document.getElementById('setting-timer').disabled = true;
 }
 
 function initModeToggle() {
@@ -2610,7 +2600,7 @@ function stopQuickMatchClock() {
   STATE.quickMatchInterval = null;
 }
 
-function beginQuickMatchSearch(waitMs, rotation) {
+function beginQuickMatchSearch(waitMs) {
   stopQuickMatchClock();
   STATE.quickMatchSearching = true;
   STATE.quickMatchWaitMs = Number(waitMs) || 5000;
@@ -2618,30 +2608,26 @@ function beginQuickMatchSearch(waitMs, rotation) {
   var card = document.getElementById('connect-card');
   card.classList.remove('waiting');
   card.classList.add('searching');
-  STATE.quickRotation = rotation || null;
-  document.getElementById('quick-match-title').textContent = rotation && rotation.active
-    ? 'Opponent Rotation ' + rotation.position + '/' + rotation.total
-    : 'Searching for opponent';
+  STATE.quickRotation = null;
+  document.getElementById('quick-match-title').textContent = 'Searching for opponent';
   document.getElementById('btn-cancel-quick-match').disabled = false;
   setModeControlsLocked(true);
 
   function updateSearchTime() {
     var remaining = Math.max(0, STATE.quickMatchWaitMs - (Date.now() - STATE.quickMatchStartedAt));
-    document.getElementById('quick-match-countdown').textContent = rotation && rotation.active
-      ? 'Preparing bot opponent ' + rotation.position + ' of ' + rotation.total + '... ' + Math.ceil(remaining / 1000) + 's'
-      : (remaining > 0 ? 'Searching for an available player... ' + Math.ceil(remaining / 1000) + 's' : 'Preparing an arena opponent...');
+    document.getElementById('quick-match-countdown').textContent = remaining > 0
+      ? 'Searching for an available opponent... ' + Math.ceil(remaining / 1000) + 's'
+      : 'Preparing an arena opponent...';
   }
   updateSearchTime();
   STATE.quickMatchInterval = setInterval(updateSearchTime, 100);
 }
 
-function showQuickMatchFound(opponentName, rotation) {
+function showQuickMatchFound(opponentName) {
   stopQuickMatchClock();
   STATE.quickMatchSearching = false;
-  STATE.quickRotation = rotation || STATE.quickRotation;
-  document.getElementById('quick-match-title').textContent = rotation && rotation.active
-    ? 'Opponent Rotation ' + rotation.position + '/' + rotation.total
-    : 'Opponent found!';
+  STATE.quickRotation = null;
+  document.getElementById('quick-match-title').textContent = 'Opponent found!';
   document.getElementById('quick-match-countdown').textContent = opponentName + ' is ready. The battle will begin shortly...';
   document.getElementById('btn-cancel-quick-match').disabled = true;
 }
@@ -2688,7 +2674,7 @@ function handleMessage(msg) {
       applyAuthoritativeRoomState({ gameMode: msg.gameMode, settings: msg.settings });
       STATE.roomCode = 'QUICK';
       document.getElementById('hdr-room').textContent = 'Quick';
-      beginQuickMatchSearch(msg.waitMs, msg.rotation);
+      beginQuickMatchSearch(msg.waitMs);
       break;
 
     case 'quickMatchFound':
@@ -2696,7 +2682,7 @@ function handleMessage(msg) {
       STATE.you = msg.you;
       STATE.roomCode = 'QUICK';
       document.getElementById('hdr-room').textContent = 'Quick';
-      showQuickMatchFound(msg.opponentName, msg.rotation);
+      showQuickMatchFound(msg.opponentName);
       break;
 
     case 'quickMatchCancelled':
@@ -2747,7 +2733,7 @@ function handleMessage(msg) {
       applyAuthoritativeRoomState(msg);
       STATE.matchType = msg.matchType || 'room';
       STATE.opponentIsBot = !!msg.opponentIsBot;
-      STATE.quickRotation = msg.rotation || null;
+      STATE.quickRotation = null;
       STATE.you = msg.you;
       STATE.players = msg.players;
       STATE.yourCards = msg.yourCards;
@@ -2775,7 +2761,7 @@ function handleMessage(msg) {
       resetQuickMatchUI();
       applyAuthoritativeRoomState(msg);
       STATE.you = msg.you; STATE.players = msg.players; STATE.yourCards = msg.yourCards || [];
-      STATE.matchType = msg.matchType || 'room'; STATE.opponentIsBot = !!msg.opponentIsBot; STATE.quickRotation = msg.rotation || null;
+      STATE.matchType = msg.matchType || 'room'; STATE.opponentIsBot = !!msg.opponentIsBot; STATE.quickRotation = null;
       STATE.battleActive = true; STATE.isSprint = msg.gameMode === 'sprint'; STATE.round = msg.round || 0; STATE.currentPlayer = msg.currentPlayer;
       document.getElementById('disconnect-overlay').classList.remove('show');
       setInfernoArena(true);
@@ -3039,7 +3025,7 @@ function handleMessage(msg) {
         msg.ranked ? 'Ranked result is being saved...' : 'Unranked - custom settings do not affect the leaderboard.',
         msg.ranked ? '' : 'error'
       );
-      document.getElementById('winner-rematch').textContent = STATE.matchType === 'quick' ? 'Next Opponent' : 'Rematch';
+      document.getElementById('winner-rematch').textContent = STATE.matchType === 'quick' ? 'Play Again' : 'Rematch';
       document.getElementById('winner-overlay').classList.add('show');
       document.getElementById('answer-input').disabled = true;
       document.getElementById('btn-attack').disabled = true;
@@ -3062,17 +3048,6 @@ function handleMessage(msg) {
       if (msg.tier) rankText += ' · ' + msg.tier + (msg.division ? ' ' + msg.division : '');
       setWinnerRankedStatus(rankText, msg.delta >= 0 ? 'success' : 'error');
       loadHomeRanks();
-      break;
-
-    case 'botRotationProgress':
-      STATE.quickRotation = msg;
-      if (msg.incomplete) {
-        setWinnerRankedStatus('Opponent Rotation ' + msg.position + '/' + msg.total + ' is not complete. This opponent will be repeated.', 'error');
-      } else if (msg.active) {
-        setWinnerRankedStatus('Opponent Rotation: ' + msg.completed + '/' + msg.total + ' complete. Press Next Opponent.', 'success');
-      } else {
-        setWinnerRankedStatus('All ' + msg.total + ' opponents are complete. You can now meet real players again.', 'success');
-      }
       break;
 
     case 'opponentLeft':
@@ -3719,7 +3694,7 @@ function initEventListeners() {
     var quickMode = STATE.gameMode === 'sprint' ? 'sprint' : 'ffa';
     STATE.settings = quickMode === 'sprint'
       ? { timer: 60, sprintTime: 60, sifir: 0, difficulty: 'random', gameMode: 'sprint' }
-      : { timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: 60 };
+      : { timer: 3, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: 60 };
     if (!send({ type: 'setName' })) return;
     send({ type: 'quickMatch', gameMode: quickMode });
   });

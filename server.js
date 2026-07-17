@@ -43,7 +43,8 @@ const TIMEOUT_DAMAGE = 8;
 const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
 const TIME_FREEZE_SECONDS = 3;
-const MULTIPLAYER_TURN_SECONDS = 6;
+const MULTIPLAYER_TURN_SECONDS = 3;
+const SOLO_TURN_SECONDS = 3;
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 5000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
 const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONNECT_GRACE_MS) || 30000);
@@ -180,14 +181,14 @@ function normalizeSettings(settings) {
   const timer = Number(source.timer);
   const sifir = Number(source.sifir);
   const sprintTime = Number(source.sprintTime);
-  const allowedTimers = [4, 6, 8, 10, 20];
+  const allowedTimers = [3, 4, 6, 8, 10, 20];
   const allowedDifficulties = ['random', 'easy', 'medium', 'hard'];
   const allowedModes = ['ffa', 'sprint'];
   const gameMode = allowedModes.includes(source.gameMode) ? source.gameMode : 'ffa';
   const normalizedSprintTime = [30, 45, 60].includes(sprintTime) ? sprintTime : SPRINT_DURATION;
 
   return {
-    timer: gameMode === 'sprint' ? normalizedSprintTime : (allowedTimers.includes(timer) ? timer : 20),
+    timer: gameMode === 'sprint' ? normalizedSprintTime : (allowedTimers.includes(timer) ? timer : SOLO_TURN_SECONDS),
     sifir: Number.isInteger(sifir) && sifir >= 0 && sifir <= 12 ? sifir : 0,
     difficulty: allowedDifficulties.includes(source.difficulty) ? source.difficulty : 'random',
     gameMode: gameMode,
@@ -202,7 +203,7 @@ function isRankedSettings(settings, mode) {
     return Number(source.timer) === SPRINT_DURATION && Number(source.sprintTime) === SPRINT_DURATION;
   }
   if (mode === 'ffa' || mode === 'multiplayer') return Number(source.timer) === MULTIPLAYER_TURN_SECONDS;
-  return Number(source.timer) === 20;
+  return Number(source.timer) === SOLO_TURN_SECONDS;
 }
 
 function isRankedRoom(room) {
@@ -248,16 +249,7 @@ function updateCompletedQuickMatchRotation(room, participants, mode) {
   if (!bot || humans.length !== 1 || !room.botRotation) return;
   const human = humans[0];
   if (room.botRotation.profileId !== human.profileId) return;
-  if (room.forfeitedPlayerId && room.forfeitedPlayerId === human.playerId) {
-    sendToPlayer(human.playerId, {
-      type: 'botRotationProgress', mode: mode, active: true,
-      completed: Number(room.botRotation.state.completed) || 0,
-      total: botCatalog.ROTATION_BOTS.length,
-      position: Number(room.botRotation.state.position) || 1,
-      incomplete: true
-    });
-    return;
-  }
+  if (room.forfeitedPlayerId && room.forfeitedPlayerId === human.playerId) return;
   completePlayerBotRotation(human, mode, bot.profileId);
 }
 
@@ -339,6 +331,7 @@ function startSoloSession(playerId, message) {
   const source = message && message.settings ? message.settings : {};
   const settings = normalizeSettings({ timer: source.timer, sifir: source.sifir, difficulty: source.difficulty, gameMode: 'ffa' });
   settings.gameMode = 'solo';
+  settings.timer = SOLO_TURN_SECONDS;
   const sessionId = 'ss_' + cryptoRandomId();
   soloSessions.set(player.accountId, { sessionId: sessionId, settings: settings, startedAt: Date.now(), used: false });
   sendToPlayer(playerId, { type: 'soloSessionStarted', sessionId: sessionId, settings: settings });
@@ -451,17 +444,6 @@ function rotationKey(profileId, mode) {
   return profileId + ':' + mode;
 }
 
-function publicRotationState(state) {
-  if (!state) return null;
-  return {
-    active: !!state.active,
-    completed: Number(state.completed) || 0,
-    total: Number(state.total) || botCatalog.ROTATION_BOTS.length,
-    position: state.position === null || state.position === undefined ? null : Number(state.position),
-    opponentName: state.bot && state.bot.name ? state.bot.name : null
-  };
-}
-
 function fallbackRotationState(profileId, mode) {
   const state = botRotationFallback.get(rotationKey(profileId, mode));
   if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.ROTATION_BOTS.length, position: null, bot: null };
@@ -478,9 +460,6 @@ async function beginPlayerBotRotations(participants, mode) {
   try { await leaderboard.beginBotRotation(profileIds, mode); } catch (error) {
     console.error('Bot rotation persistence unavailable:', error.message);
   }
-  humans.forEach(function (participant) {
-    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.ROTATION_BOTS.length, position: 1 });
-  });
 }
 
 async function claimPlayerBotRotation(player, mode) {
@@ -523,7 +502,6 @@ async function completePlayerBotRotation(participant, mode, botProfileId) {
     const persisted = await leaderboard.completeBotRotation(participant.profileId, mode, botProfileId);
     if (persisted.advanced || !progress) progress = persisted;
   } catch (error) {}
-  if (progress) sendToPlayer(participant.playerId, Object.assign({ type: 'botRotationProgress', mode: mode }, publicRotationState(progress)));
   return progress;
 }
 
@@ -549,9 +527,6 @@ function rankedQuickMatchSettings(gameMode) {
 }
 
 function sendQuickMatchFound(playerId, opponentId, you, room) {
-  const rotation = room.botRotation && room.botRotation.profileId === players[playerId].profileId
-    ? publicRotationState(room.botRotation.state)
-    : null;
   sendToPlayer(playerId, {
     type: 'quickMatchFound',
     opponentName: players[opponentId].name,
@@ -559,8 +534,7 @@ function sendQuickMatchFound(playerId, opponentId, you, room) {
     gameMode: room.gameMode,
     matchType: room.matchType,
     opponentIsBot: !!players[opponentId].isBot,
-    settings: room.settings,
-    rotation: rotation
+    settings: room.settings
   });
 }
 
@@ -675,7 +649,7 @@ async function requestQuickMatch(playerId, requestedMode) {
       return requestQuickMatch(playerId, gameMode);
     }
     const remainingWait = Math.max(10, QUICK_MATCH_WAIT_MS - (Date.now() - existingEntry.queuedAt));
-    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: remainingWait, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(existingEntry.rotation) });
+    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: remainingWait, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
     return;
   }
 
@@ -695,7 +669,7 @@ async function requestQuickMatch(playerId, requestedMode) {
     quickMatchQueue.push(rotationEntry);
     sendToPlayer(playerId, {
       type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode,
-      settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(rotation)
+      settings: rankedQuickMatchSettings(gameMode)
     });
     return;
   }
@@ -784,7 +758,6 @@ function startBattle(room) {
     gameMode: room.gameMode,
     matchType: room.matchType,
     opponentIsBot: !!players[p2Id].isBot,
-    rotation: room.botRotation && room.botRotation.profileId === players[p1Id].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: p1Cards
@@ -796,7 +769,6 @@ function startBattle(room) {
     gameMode: room.gameMode,
     matchType: room.matchType,
     opponentIsBot: !!players[p1Id].isBot,
-    rotation: room.botRotation && room.botRotation.profileId === players[p2Id].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: p2Cards
@@ -1225,8 +1197,8 @@ function startSprint(room) {
   room.sprintQuestionVersions = [0, 0];
   room.botSprintTimers = [null, null];
 
-  sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p2Id].isBot, rotation: room.botRotation && room.botRotation.profileId === players[p1Id].profileId ? publicRotationState(room.botRotation.state) : null, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
-  sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p1Id].isBot, rotation: room.botRotation && room.botRotation.profileId === players[p2Id].profileId ? publicRotationState(room.botRotation.state) : null, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p1Id, { type: 'gameStart', you: 0, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p2Id].isBot, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
+  sendToPlayer(p2Id, { type: 'gameStart', you: 1, gameMode: room.gameMode, matchType: room.matchType, opponentIsBot: !!players[p1Id].isBot, settings: room.settings, players: room.gameState.players, yourCards: [], sprint: true });
 }
 
 function sendSprintQuestion(room, playerIdx) {
@@ -1496,7 +1468,6 @@ function resumeRoomAfterReconnect(room, playerId) {
     gameMode: room.gameMode,
     matchType: room.matchType,
     opponentIsBot: !!(players[room.players[1 - idx]] && players[room.players[1 - idx]].isBot),
-    rotation: room.botRotation && room.botRotation.profileId === players[playerId].profileId ? publicRotationState(room.botRotation.state) : null,
     settings: room.settings,
     players: room.gameState.players,
     yourCards: room.gameState.players[idx].cards || [],
@@ -2336,7 +2307,7 @@ wss.on('connection', async function connection(ws, req) {
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
         if (room && room.matchType === 'quick') {
-          sendToPlayer(playerId, { type: 'quickMatchError', error: 'Use Next Opponent to continue the rotation.' });
+          sendToPlayer(playerId, { type: 'quickMatchError', error: 'Use Play Again to find your next match.' });
           break;
         }
         if (room && room.players.length === 2 && !room.battleActive && !room.countdownPending) {

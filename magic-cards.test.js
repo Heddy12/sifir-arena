@@ -24,7 +24,7 @@ function makeRoom(cardId, hp, opponentHp) {
   return {
     code: 'MAGIC',
     players: ['magic_p0', 'magic_p1'],
-    settings: { timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa' },
+    settings: { timer: 3, sifir: 0, difficulty: 'random', gameMode: 'ffa' },
     gameMode: 'ffa',
     battleActive: true,
     currentPlayer: 0,
@@ -67,7 +67,7 @@ function run() {
   let room = makeRoom('doubleStrike');
   let player = activate(room);
   assert.strictEqual(player.activeEffects.doubleStrike, true);
-  game.handleCorrect(room, player, room.gameState.players[1], 0, 2);
+  game.handleCorrect(room, player, room.gameState.players[1], 0, 1);
   assert.strictEqual(room.gameState.players[1].hp, 70, 'Double Strike doubles base + fast damage');
   assert.strictEqual(player.activeEffects.doubleStrike, false, 'Double Strike is consumed by the next correct answer');
   cleanup(room);

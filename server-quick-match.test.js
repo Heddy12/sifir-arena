@@ -70,7 +70,7 @@ async function run() {
     const searchingA = waitForMessage(playerA, 'quickMatchSearching');
     playerA.send(JSON.stringify({ type: 'quickMatch' }));
     const searchState = await searchingA;
-    assert.strictEqual(searchState.settings.timer, 6);
+    assert.strictEqual(searchState.settings.timer, 3);
     assert.strictEqual(searchState.settings.sifir, 0);
     assert.strictEqual(searchState.settings.difficulty, 'random');
 
@@ -89,7 +89,7 @@ async function run() {
     assert.strictEqual(paired[0].opponentName, 'Quick_Bravo');
     assert.strictEqual(paired[1].opponentName, 'Quick_Alpha');
     const starts = await Promise.all([startA, startB]);
-    assert.strictEqual(starts[0].settings.timer, 6);
+    assert.strictEqual(starts[0].settings.timer, 3);
     assert.strictEqual(starts[1].players.length, 2);
     let earlyTurn = false;
     function detectEarlyTurn(raw) { try { if (JSON.parse(raw).type === 'newTurn') earlyTurn = true; } catch (error) {} }
@@ -103,7 +103,7 @@ async function run() {
     const firstTurn = waitForMessage(playerA, 'newTurn');
     playerB.send(JSON.stringify({ type: 'battleReady' }));
     const turn = await firstTurn;
-    assert.strictEqual(turn.timer, 6);
+    assert.strictEqual(turn.timer, 3);
     playerA.off('message', detectEarlyTurn);
     playerB.off('message', detectEarlyTurn);
     const reconnectNotice = waitForMessage(playerB, 'opponentReconnecting');
@@ -115,15 +115,11 @@ async function run() {
     await reconnectConnected;
     const resumeState = await resumed;
     assert.strictEqual(resumeState.players.length, 2);
-    assert.strictEqual(resumeState.settings.timer, 6);
+    assert.strictEqual(resumeState.settings.timer, 3);
     assert.strictEqual(resumeState.matchType, 'quick');
     sockets.push(reconnectedA);
-    const rotationStarted = waitForMessage(reconnectedA, 'botRotationProgress');
     reconnectedA.send(JSON.stringify({ type: 'leaveRoom' }));
-    const rotationState = await rotationStarted;
-    assert.strictEqual(rotationState.active, true);
-    assert.strictEqual(rotationState.completed, 0);
-    assert.strictEqual(rotationState.total, botCatalog.ROTATION_BOTS.length);
+    await new Promise(function (resolve) { setTimeout(resolve, 80); });
     playerB.close();
 
     const rotationSearching = waitForMessage(reconnectedA, 'quickMatchSearching');
@@ -131,13 +127,13 @@ async function run() {
     const rotationStart = waitForMessage(reconnectedA, 'gameStart');
     reconnectedA.send(JSON.stringify({ type: 'quickMatch', gameMode: 'ffa' }));
     const forcedSearch = await rotationSearching;
-    assert.strictEqual(forcedSearch.rotation.position, 1);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(forcedSearch, 'rotation'), false);
     const forcedMatch = await rotationFound;
     assert.strictEqual(forcedMatch.opponentName, botCatalog.ROTATION_BOTS[0].name);
     const forcedGame = await rotationStart;
     assert.strictEqual(forcedGame.matchType, 'quick');
     assert.strictEqual(forcedGame.opponentIsBot, true);
-    assert.strictEqual(forcedGame.rotation.position, 1);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(forcedGame, 'rotation'), false);
     reconnectedA.close();
 
     const cookieC = await register(base, 'Charlie');
@@ -156,10 +152,10 @@ async function run() {
     assert.strictEqual(botGame.gameMode, 'ffa');
     assert.strictEqual(botGame.matchType, 'quick');
     assert.strictEqual(botGame.opponentIsBot, true);
-    assert.strictEqual(botGame.rotation, null, 'a no-player bot fallback should return to real-player search after the match');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(botGame, 'rotation'), false, 'rotation details must remain server-side');
     const botTurn = waitForMessage(playerC, 'newTurn');
     playerC.send(JSON.stringify({ type: 'battleReady' }));
-    assert.strictEqual((await botTurn).timer, 6);
+    assert.strictEqual((await botTurn).timer, 3);
     playerC.close();
 
     const cookieD = await register(base, 'Delta');
@@ -190,7 +186,7 @@ async function run() {
     const sprintGame = await sprintStart;
     assert.strictEqual(sprintGame.gameMode, 'sprint');
     assert.strictEqual(sprintGame.sprint, true);
-    assert.strictEqual(sprintGame.rotation, null, 'Sprint bot fallback should not force a long bot circuit');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(sprintGame, 'rotation'), false, 'Sprint must not expose rotation details');
     const sprintFirstQuestion = waitForMessage(playerD, 'newTurn');
     playerD.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await sprintFirstQuestion).sprint, true);

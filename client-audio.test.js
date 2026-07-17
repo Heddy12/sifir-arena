@@ -168,11 +168,11 @@ function run() {
   assert.ok(loaded.html.includes('Bio saved successfully.'), 'profile editor should confirm a successful save');
   assert.ok(loaded.html.includes('ownsDisplayedProfile'), 'signed-in owner should be able to edit their own displayed profile');
   assert.ok(loaded.html.includes("fetch('/api/profile',{method:'POST'"), 'bio save should use the widely supported POST method');
-  assert.ok(loaded.html.includes("STATE.matchType === 'quick'"), 'Quick Match result should use the next-opponent flow');
+  assert.ok(loaded.html.includes("STATE.matchType === 'quick'"), 'Quick Match result should use the play-again flow');
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
-  assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
-  assert.ok(loaded.html.includes("selectedMode === 'ffa' ? 6"), 'Multiplayer Create Room should always send a 6-second timer');
-  assert.ok(loaded.html.includes('Search for a real player for 5 seconds.'), 'Quick Match should explain its five-second real-player search');
+  assert.strictEqual(loaded.html.includes('Opponent Rotation'), false, 'client must not reveal server-side opponent rotation');
+  assert.ok(loaded.html.includes("selectedMode === 'sprint' ? sprintDuration : 3"), 'Single Player and Multiplayer must always send a 3-second timer');
+  assert.ok(loaded.html.includes('Search for an available opponent for 5 seconds.'), 'Quick Match should explain its five-second opponent search');
   assert.strictEqual(loaded.html.includes('Search for a player for 8 seconds.'), false, 'legacy eight-second search copy should be removed');
   assert.strictEqual(loaded.html.includes('id="sticker-picker"'), false, 'battle stickers should remain disabled');
   console.log('client audio tests passed');
