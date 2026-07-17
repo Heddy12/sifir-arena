@@ -1587,7 +1587,7 @@ function saveProfile() {
   saveButton.disabled = true;
   status.textContent = 'Menyimpan bio...';
   status.className = 'profile-edit-status';
-  fetch('/api/profile',{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({avatarKey:document.getElementById('profile-avatar-select').value,bio:document.getElementById('profile-bio-input').value.trim()})})
+  fetch('/api/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({avatarKey:document.getElementById('profile-avatar-select').value,bio:document.getElementById('profile-bio-input').value.trim()})})
     .then(function(r){return r.json().catch(function(){return {};}).then(function(b){if(!r.ok)throw new Error(b.error||'Unable to save profile');return b;});})
     .then(function(body){
       STATE.profileData.player.avatarKey = body.profile.avatarKey;

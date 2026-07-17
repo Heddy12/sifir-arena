@@ -73,7 +73,7 @@ async function run() {
     assert.strictEqual(profileBody.profile.isOwner, true);
     assert.strictEqual(JSON.stringify(profileBody).includes('g-97558615@moe-dl.edu.my'), false);
     response = await fetch(base + '/api/profile', {
-      method: 'PATCH', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
       body: JSON.stringify({ avatarKey: 'knight-red', bio: 'Training for the arena' })
     });
     assert.strictEqual(response.status, 200);
@@ -82,6 +82,7 @@ async function run() {
     response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
     profileBody = await response.json();
     assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');
+    assert.strictEqual(profileBody.profile.player.bio, 'Training for the arena');
 
     response = await fetch(base + '/api/register', {
       method: 'POST',

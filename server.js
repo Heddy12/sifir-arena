@@ -1729,7 +1729,7 @@ async function handleProfileRequest(req, res) {
       sendJson(res, 200, { profile: profile });
       return;
     }
-    if (req.method === 'PATCH') {
+    if (req.method === 'PATCH' || req.method === 'POST') {
       if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
       const body = await readJsonBody(req, 4 * 1024);
       const requestedProfileId = body && body.profileId ? leaderboard.normalizeProfileId(body.profileId) : null;

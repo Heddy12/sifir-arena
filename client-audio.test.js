@@ -167,6 +167,7 @@ function run() {
   assert.ok(loaded.html.includes('Edit Bio Anda'), 'owner profile should show a clear bio editor');
   assert.ok(loaded.html.includes('Bio berjaya disimpan.'), 'profile editor should confirm a successful save');
   assert.ok(loaded.html.includes('ownsDisplayedProfile'), 'signed-in owner should be able to edit their own displayed profile');
+  assert.ok(loaded.html.includes("fetch('/api/profile',{method:'POST'"), 'bio save should use the widely supported POST method');
   assert.ok(loaded.html.includes("STATE.matchType === 'quick'"), 'Quick Match result should use the next-opponent flow');
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
   assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
