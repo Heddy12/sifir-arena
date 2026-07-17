@@ -442,6 +442,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 .landing-account strong{color:var(--neon-cyan);letter-spacing:0.6px;}
 .profile-mini-btn{padding:7px 10px;border:1px solid var(--neon-cyan);border-radius:6px;background:rgba(0,240,255,0.08);color:var(--neon-cyan);font:inherit;font-size:0.59rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}
 .logout-btn{padding:7px 10px;border:1px solid var(--neon-red);border-radius:6px;background:rgba(255,46,99,0.08);color:var(--neon-red);font:inherit;font-size:0.59rem;font-weight:bold;text-transform:uppercase;cursor:pointer;}
+.game-master-btn{display:none;padding:7px 10px;border:1px solid var(--neon-yellow);border-radius:6px;background:rgba(255,230,0,.08);color:var(--neon-yellow);font:inherit;font-size:.59rem;font-weight:bold;text-transform:uppercase;text-decoration:none;cursor:pointer}.game-master-btn.show{display:inline-block}
 
 .home-ranks{width:min(620px,94vw);padding:9px 10px;border:1px solid rgba(255,230,0,.24);border-radius:13px;background:linear-gradient(145deg,rgba(19,19,31,.92),rgba(11,11,23,.86));box-shadow:0 10px 30px rgba(0,0,0,.25),inset 0 0 24px rgba(255,230,0,.025);box-sizing:border-box;}
 .home-ranks-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;padding:0 3px;}
@@ -773,7 +774,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
 <div class="landing-screen" id="landing-screen">
   <img class="landing-title" src="images/title.png" alt="Times Table Hero Arena" onerror="this.style.display='none';">
   <div class="landing-tagline">Math Power. Battle Arena.</div>
-  <div class="landing-account"><span>Player ID: <strong id="account-player-name">-</strong></span><button class="profile-mini-btn" id="profile-open-btn" type="button">Profile</button><button class="logout-btn" id="logout-btn" type="button">Logout</button></div>
+  <div class="landing-account"><span>Player ID: <strong id="account-player-name">-</strong></span><button class="profile-mini-btn" id="profile-open-btn" type="button">Profile</button><a class="game-master-btn" id="game-master-btn" href="/game-master">Game Master</a><button class="logout-btn" id="logout-btn" type="button">Logout</button></div>
 
   <section class="home-ranks" aria-labelledby="home-ranks-title">
     <div class="home-ranks-heading"><span class="home-ranks-title" id="home-ranks-title">&#9733; My Season Rank</span><span class="home-ranks-season" id="home-ranks-season">Loading season...</span></div>
@@ -1140,12 +1141,13 @@ function showAuthMode(mode) {
   setAuthStatus('', '');
 }
 
-function setAuthenticatedAccount(account) {
+function setAuthenticatedAccount(account, isGameMaster) {
   STATE.account = account;
   STATE.profileId = account ? account.accountId : null;
   var playerName = account ? account.playerName : 'Player';
   document.getElementById('player-name').value = playerName;
   document.getElementById('account-player-name').textContent = account ? account.playerName : '-';
+  document.getElementById('game-master-btn').classList.toggle('show', !!(account && isGameMaster));
   document.body.classList.remove('auth-pending', 'auth-required');
   if (account) {
     loadHomeRanks();
@@ -1169,6 +1171,7 @@ function requireAuthentication(message) {
   document.body.classList.remove('auth-pending');
   document.body.classList.add('auth-required');
   STATE.homeRankRequestId++;
+  document.getElementById('game-master-btn').classList.remove('show');
   var rankGrid = document.getElementById('home-rank-grid');
   if (rankGrid) rankGrid.innerHTML = '<div class="home-rank-state">Login to view your season ranks.</div>';
   showAuthMode('login');
@@ -1206,7 +1209,7 @@ function authRequest(mode) {
     });
   }).then(function (body) {
     form.reset();
-    setAuthenticatedAccount(body.account);
+    setAuthenticatedAccount(body.account, body.isGameMaster);
     connectWebSocket();
   }).catch(function (error) {
     setAuthStatus(error.message || 'Unable to process the request.', 'error');
@@ -1293,7 +1296,7 @@ function checkCurrentAccount() {
       });
     })
     .then(function (body) {
-      setAuthenticatedAccount(body.account);
+      setAuthenticatedAccount(body.account, body.isGameMaster);
       connectWebSocket();
     })
     .catch(function (error) {

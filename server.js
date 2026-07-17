@@ -30,6 +30,7 @@ const AUTH_IP_MAX_ATTEMPTS = 100;
 const authAttempts = new Map();
 const disconnectedPlayers = new Map();
 const soloSessions = new Map();
+const GAME_MASTER_EMAIL = leaderboard.normalizeEmail(process.env.GAME_MASTER_EMAIL || '');
 
 /* ==================== CONSTANTS ==================== */
 const SPRINT_DURATION = 60;
@@ -421,6 +422,7 @@ function createRoom(playerId, settings) {
     countdownFallback: null,
     readyPlayers: {},
     matchType: 'room',
+    createdAt: Date.now(),
     botProfileId: null,
     botRotation: null,
     forfeitedPlayerId: null
@@ -1767,6 +1769,9 @@ function readJsonBody(req, limit) {
 
 function authErrorStatus(error) {
   if (error.code === 'INVALID_CREDENTIALS') return 401;
+  if (error.code === 'ACCOUNT_SUSPENDED' || error.code === 'ACCOUNT_ARCHIVED') return 403;
+  if (error.code === 'GAME_MASTER_SELF_PROTECTED') return 403;
+  if (error.code === 'PLAYER_ONLINE') return 409;
   if (error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN') return 409;
   if (error.code === 'LEADERBOARD_UNAVAILABLE') return 503;
   if (error.code === 'EMAIL_NOT_CONFIGURED' || error.code === 'EMAIL_SEND_FAILED') return 503;
@@ -1774,6 +1779,203 @@ function authErrorStatus(error) {
   if (error.code === 'PROFILE_NOT_EDITABLE') return 403;
   if (String(error.code || '').startsWith('INVALID_') || error.code === 'BODY_TOO_LARGE') return 400;
   return 500;
+}
+
+function isGameMasterAccount(account) {
+  return !!(GAME_MASTER_EMAIL && account && account.email === GAME_MASTER_EMAIL);
+}
+
+function gameMasterLiveSnapshot() {
+  const onlineHumans = Object.keys(players).map(function (playerId) {
+    const player = players[playerId];
+    if (!player || player.isBot || !player.accountId) return null;
+    return {
+      accountId: player.accountId,
+      playerName: player.name,
+      roomCode: player.roomCode || null,
+      inBattle: !!(player.roomCode && rooms[player.roomCode] && rooms[player.roomCode].battleActive)
+    };
+  }).filter(Boolean);
+  const battles = Object.keys(rooms).map(function (code) {
+    const room = rooms[code];
+    const participants = room.players.map(function (playerId) {
+      const player = players[playerId];
+      return player ? { name: player.name, isBot: !!player.isBot } : { name: 'Disconnected', isBot: false };
+    });
+    let state = 'waiting';
+    if (room.battleActive) state = 'battle';
+    else if (room.countdownPending) state = 'countdown';
+    else if (room.leaderboardRecorded) state = 'completed';
+    return {
+      roomCode: code,
+      mode: room.gameMode === 'ffa' ? 'multiplayer' : room.gameMode,
+      matchType: room.matchType || 'room',
+      status: state,
+      round: Number(room.round) || 0,
+      participants: participants,
+      durationSeconds: room.startedAt ? Math.max(0, Math.round((Date.now() - room.startedAt) / 1000)) : 0,
+      createdAt: room.createdAt || null
+    };
+  });
+  return {
+    onlinePlayers: onlineHumans.length,
+    online: onlineHumans,
+    activeBattles: battles.filter(function (room) { return room.status === 'battle' || room.status === 'countdown'; }).length,
+    rooms: battles,
+    quickMatchQueue: quickMatchQueue.map(function (entry) {
+      const player = players[entry.playerId];
+      return {
+        playerName: player ? player.name : 'Disconnected',
+        mode: entry.gameMode === 'ffa' ? 'multiplayer' : entry.gameMode,
+        waitingSeconds: Math.max(0, Math.round((Date.now() - entry.queuedAt) / 1000))
+      };
+    })
+  };
+}
+
+function gameMasterTargetIsOnline(accountId) {
+  return Object.keys(players).some(function (playerId) {
+    return players[playerId] && players[playerId].accountId === accountId;
+  });
+}
+
+async function handleGameMasterRequest(req, res, urlPath) {
+  let account;
+  try {
+    if (!GAME_MASTER_EMAIL) {
+      sendJson(res, 503, { error: 'Game Master access is not configured.' });
+      return;
+    }
+    account = await leaderboard.getAccountBySession(sessionToken(req));
+    if (!account) { sendJson(res, 401, { error: 'Login required.' }); return; }
+    if (!isGameMasterAccount(account)) { sendJson(res, 403, { error: 'Game Master access required.' }); return; }
+
+    if (req.method === 'GET') {
+      const requestUrl = new URL(req.url, 'http://localhost');
+      if (urlPath === '/api/game-master/me') {
+        sendJson(res, 200, { gameMaster: { accountId: account.accountId, email: account.email, playerName: account.playerName } });
+        return;
+      }
+      if (urlPath === '/api/game-master/overview') {
+        const overview = await leaderboard.getGameMasterOverview();
+        const live = gameMasterLiveSnapshot();
+        sendJson(res, 200, { overview: Object.assign({}, overview, {
+          onlinePlayers: live.onlinePlayers,
+          activeBattles: live.activeBattles,
+          queuedPlayers: live.quickMatchQueue.length,
+          databaseReady: leaderboard.status().ready
+        }) });
+        return;
+      }
+      if (urlPath === '/api/game-master/live') {
+        sendJson(res, 200, { live: gameMasterLiveSnapshot() });
+        return;
+      }
+      if (urlPath === '/api/game-master/players') {
+        const result = await leaderboard.listGameMasterPlayers({
+          query: requestUrl.searchParams.get('q') || '',
+          status: requestUrl.searchParams.get('status') || '',
+          page: requestUrl.searchParams.get('page'),
+          limit: requestUrl.searchParams.get('limit')
+        });
+        result.players.forEach(function (player) { player.online = gameMasterTargetIsOnline(player.accountId); });
+        sendJson(res, 200, result);
+        return;
+      }
+      if (urlPath === '/api/game-master/bots') {
+        sendJson(res, 200, { bots: await leaderboard.listGameMasterBots() });
+        return;
+      }
+      if (urlPath === '/api/game-master/season') {
+        sendJson(res, 200, { season: await leaderboard.getGameMasterSeason() });
+        return;
+      }
+      if (urlPath === '/api/game-master/audit') {
+        sendJson(res, 200, { entries: await leaderboard.listGameMasterAudit(requestUrl.searchParams.get('limit')) });
+        return;
+      }
+      const playerDetail = urlPath.match(/^\/api\/game-master\/players\/([A-Za-z0-9_-]{8,80})$/);
+      if (playerDetail) {
+        const detail = await leaderboard.getGameMasterPlayer(playerDetail[1], account.accountId);
+        detail.account.online = gameMasterTargetIsOnline(detail.account.accountId);
+        sendJson(res, 200, detail);
+        return;
+      }
+      sendJson(res, 404, { error: 'Game Master endpoint not found.' });
+      return;
+    }
+
+    if (req.method !== 'POST' && req.method !== 'PATCH') {
+      sendJson(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+    if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Request not allowed.' }); return; }
+    const actionMatch = urlPath.match(/^\/api\/game-master\/players\/([A-Za-z0-9_-]{8,80})\/(rename|reset-password|suspend|reactivate|archive|restore)$/);
+    if (!actionMatch) { sendJson(res, 404, { error: 'Game Master endpoint not found.' }); return; }
+    const targetAccountId = actionMatch[1];
+    const action = actionMatch[2];
+    const target = await leaderboard.getGameMasterPlayer(targetAccountId, account.accountId);
+    if (targetAccountId === account.accountId && action !== 'reset-password') {
+      const selfError = new Error('You cannot modify your own Game Master account.');
+      selfError.code = 'GAME_MASTER_SELF_PROTECTED';
+      throw selfError;
+    }
+    if (action !== 'reset-password' && gameMasterTargetIsOnline(targetAccountId)) {
+      const onlineError = new Error('This player is online. Wait until the player is offline.');
+      onlineError.code = 'PLAYER_ONLINE';
+      throw onlineError;
+    }
+    const body = await readJsonBody(req, 8 * 1024);
+    let result;
+    if (action === 'rename') {
+      result = await leaderboard.renameGameMasterPlayer(targetAccountId, body.playerName);
+    } else if (action === 'reset-password') {
+      if (!emailService.isConfigured()) {
+        const emailError = new Error('Email password reset is not configured.');
+        emailError.code = 'EMAIL_NOT_CONFIGURED';
+        throw emailError;
+      }
+      const reset = await leaderboard.createGameMasterPasswordReset(targetAccountId);
+      try {
+        await emailService.sendPasswordResetCode(reset.email, reset.code);
+      } catch (sendError) {
+        await leaderboard.invalidatePasswordReset(reset.email).catch(function () {});
+        sendError.code = sendError.code || 'EMAIL_SEND_FAILED';
+        throw sendError;
+      }
+      result = { sent: true };
+    } else {
+      const statusMap = { suspend: 'suspended', reactivate: 'active', archive: 'archived', restore: 'active' };
+      result = await leaderboard.setGameMasterPlayerStatus(targetAccountId, statusMap[action], body.reason);
+    }
+    await leaderboard.writeGameMasterAudit({
+      adminAccountId: account.accountId,
+      adminEmail: account.email,
+      action: action,
+      targetAccountId: targetAccountId,
+      targetPlayerName: target.account.playerName,
+      outcome: 'success',
+      details: action === 'rename' ? { newPlayerName: result.playerName } : (body.reason ? { reason: String(body.reason).slice(0, 240) } : {}),
+      ipAddress: clientIp(req)
+    });
+    sendJson(res, 200, { ok: true, result: result });
+  } catch (error) {
+    if (account && isGameMasterAccount(account)) {
+      const match = urlPath.match(/^\/api\/game-master\/players\/([A-Za-z0-9_-]{8,80})\/([a-z-]+)$/);
+      leaderboard.writeGameMasterAudit({
+        adminAccountId: account.accountId,
+        adminEmail: account.email,
+        action: match ? match[2] : 'request',
+        targetAccountId: match ? match[1] : null,
+        outcome: 'failed',
+        details: { errorCode: String(error.code || 'ERROR').slice(0, 60) },
+        ipAddress: clientIp(req)
+      }).catch(function () {});
+    }
+    const status = authErrorStatus(error);
+    if (status >= 500) console.error('Game Master request failed:', error.message);
+    sendJson(res, status, { error: status >= 500 ? 'Game Master service is temporarily unavailable.' : error.message });
+  }
 }
 
 async function handleProfileRequest(req, res) {
@@ -1830,7 +2032,7 @@ async function handleAuthRequest(req, res, urlPath) {
     try {
       const account = await leaderboard.getAccountBySession(sessionToken(req));
       if (!account) { sendJson(res, 401, { error: 'Login required.' }); return; }
-      sendJson(res, 200, { account: account });
+      sendJson(res, 200, { account: account, isGameMaster: isGameMasterAccount(account) });
     } catch (error) {
       sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 500, { error: 'The account system is temporarily unavailable.' });
     }
@@ -1883,7 +2085,10 @@ async function handleAuthRequest(req, res, urlPath) {
       ? await leaderboard.registerAccount(body)
       : await leaderboard.loginAccount(body);
     res.setHeader('Set-Cookie', sessionCookie(req, result.token));
-    sendJson(res, urlPath === '/api/register' ? 201 : 200, { account: result.account });
+    sendJson(res, urlPath === '/api/register' ? 201 : 200, {
+      account: result.account,
+      isGameMaster: isGameMasterAccount(result.account)
+    });
   } catch (error) {
     const status = authErrorStatus(error);
     sendJson(res, status, { error: status === 500 ? 'Unable to process the request.' : error.message });
@@ -1933,6 +2138,10 @@ const server = http.createServer(function (req, res) {
     serveFile(path.join(__dirname, 'client.html'), res);
     return;
   }
+  if (urlPath === '/game-master' || urlPath === '/game-master/') {
+    serveFile(path.join(__dirname, 'game-master.html'), res);
+    return;
+  }
   if (urlPath === '/health') {
     const leaderboardStatus = leaderboard.status();
     sendJson(res, 200, {
@@ -1953,6 +2162,10 @@ const server = http.createServer(function (req, res) {
   }
   if (urlPath === '/api/ranked-ladder') {
     handleRankedLadderRequest(req, res);
+    return;
+  }
+  if (urlPath === '/api/game-master' || urlPath.startsWith('/api/game-master/')) {
+    handleGameMasterRequest(req, res, urlPath);
     return;
   }
   if (['/api/register', '/api/login', '/api/logout', '/api/me', '/api/forgot-password', '/api/reset-password'].includes(urlPath)) {

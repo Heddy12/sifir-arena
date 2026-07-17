@@ -9,6 +9,7 @@ Real-time multiplayer math battle game for 2 players on separate devices.
 | `server.js` | WebSocket server (Node.js) — room management, game logic, state sync |
 | `client.html` | Game client (self-contained) — connect screen, Solo Quest, Sprint & multiplayer battle arena, real-time sync |
 | `leaderboard-store.js` | PostgreSQL account, session and persistent leaderboard storage |
+| `game-master.html` | Secured Game Master dashboard for player management and live monitoring |
 | `server-auth.test.js` | Authentication, WebSocket access and Create Room regression tests |
 | `client-audio.test.js` | Chiptune scheduler, Music/SFX controls and persistence tests |
 | `package.json` | Node.js dependencies and scripts |
@@ -58,8 +59,9 @@ git push -u origin main
    - **Plan:** `Free`
 5. Click **Create Web Service**
 6. Add a secret environment variable named `DATABASE_URL` using the connection string from your hosted PostgreSQL provider (Supabase, Neon, or another provider)
-7. Wait for deployment to finish (2-3 minutes)
-8. You'll get a URL like: `https://sifir-arena.onrender.com`
+7. Add `GAME_MASTER_EMAIL` with the exact email address of the one authorized Game Master account
+8. Wait for deployment to finish (2-3 minutes)
+9. You'll get a URL like: `https://sifir-arena.onrender.com`
 
 ### Step 3: Play!
 1. Both players register with an email/password and choose a unique Player ID
@@ -116,6 +118,15 @@ git push -u origin main
 - **WebSocket:** Real-time bidirectional communication
 - **Auto-cleanup:** Rooms deleted after disconnect + 5s delay
 - **Global leaderboard:** Top 10 records are stored in PostgreSQL when `DATABASE_URL` is configured
+
+## Game Master Dashboard
+
+- Log in to the arena using the account whose email exactly matches `GAME_MASTER_EMAIL`
+- Open **Game Master** on the home screen or visit `/game-master`
+- Monitor live battles and Quick Match activity without exposing questions or answers
+- Search player accounts, send password reset emails, rename offline players, suspend access, and archive or restore records
+- Sensitive actions are confirmed and written to the Game Master audit log
+- Player passwords, password hashes, reset codes, session tokens, and private profile-edit controls are never exposed
 
 ## Ranked Leaderboard
 

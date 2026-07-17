@@ -12,3 +12,5 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: GAME_MASTER_EMAIL
+        sync: false

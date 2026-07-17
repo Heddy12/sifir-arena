@@ -32,6 +32,7 @@ async function run() {
   process.env.DATABASE_URL = 'postgresql://server-auth-test';
   process.env.PGSSL_DISABLE = '1';
   process.env.NODE_ENV = 'test';
+  process.env.GAME_MASTER_EMAIL = 'g-97558615@moe-dl.edu.my';
 
   const memoryDb = newDb({ noAstCoverageCheck: true });
   const memoryPg = memoryDb.adapters.createPg();
@@ -64,7 +65,9 @@ async function run() {
 
     response = await fetch(base + '/api/me', { headers: { Cookie: cookie } });
     assert.strictEqual(response.status, 200);
-    assert.strictEqual((await response.json()).account.playerName, 'RoomHero');
+    const meBody = await response.json();
+    assert.strictEqual(meBody.account.playerName, 'RoomHero');
+    assert.strictEqual(meBody.isGameMaster, true);
 
     response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
     assert.strictEqual(response.status, 200);
@@ -90,7 +93,67 @@ async function run() {
       body: JSON.stringify({ email: 'other.player@example.com', password: 'secure-pass-456', playerName: 'OtherViewer' })
     });
     assert.strictEqual(response.status, 201);
-    const otherCookie = response.headers.get('set-cookie').split(';')[0];
+    const otherAccountBody = await response.json();
+    let otherCookie = response.headers.get('set-cookie').split(';')[0];
+    response = await fetch(base + '/api/game-master/overview', { headers: { Cookie: otherCookie } });
+    assert.strictEqual(response.status, 403);
+    response = await fetch(base + '/api/game-master/me', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/game-master/overview', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual((await response.json()).overview.totalPlayers, 2);
+    response = await fetch(base + '/api/game-master/players?q=OtherViewer', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    const playersBody = await response.json();
+    assert.strictEqual(playersBody.total, 1);
+    assert.strictEqual(playersBody.players[0].email, 'other.player@example.com');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(playersBody.players[0], 'password_hash'), false);
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/rename', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName: 'OtherRenamed' })
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/game-master/players/' + accountBody.account.accountId + '/rename', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName: 'GameMasterRename' })
+    });
+    assert.strictEqual(response.status, 403);
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/suspend', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Classroom review' })
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/login', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'other.player@example.com', password: 'secure-pass-456' })
+    });
+    assert.strictEqual(response.status, 403);
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/reactivate', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/login', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'other.player@example.com', password: 'secure-pass-456' })
+    });
+    assert.strictEqual(response.status, 200);
+    otherCookie = response.headers.get('set-cookie').split(';')[0];
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/reset-password', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    assert.strictEqual(response.status, 200);
+    const adminResetMessage = emailService.takeLastTestMessage();
+    assert.strictEqual(adminResetMessage.email, 'other.player@example.com');
+    response = await fetch(base + '/api/game-master/bots', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    assert.ok((await response.json()).bots.length >= 20);
+    response = await fetch(base + '/api/game-master/season', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/game-master/audit', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200);
+    assert.ok((await response.json()).entries.length >= 4);
     response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: otherCookie } });
     assert.strictEqual(response.status, 200);
     assert.strictEqual((await response.json()).profile.isOwner, false);
@@ -104,6 +167,35 @@ async function run() {
     profileBody = await response.json();
     assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');
     assert.strictEqual(profileBody.profile.player.bio, 'Training for the arena');
+
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/archive', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Graduated class archive' })
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/profile?player=OtherRenamed', { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 404, 'archived profiles must be hidden from public profile search');
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId, { headers: { Cookie: cookie } });
+    assert.strictEqual(response.status, 200, 'Game Master can still inspect archived player records');
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/restore', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    assert.strictEqual(response.status, 200);
+    response = await fetch(base + '/api/login', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'other.player@example.com', password: 'secure-pass-456' })
+    });
+    assert.strictEqual(response.status, 200);
+    const restoredCookie = response.headers.get('set-cookie').split(';')[0];
+    const onlinePlayerSocket = new WebSocket(base.replace('http:', 'ws:'), { headers: { Cookie: restoredCookie } });
+    assert.strictEqual((await waitForMessage(onlinePlayerSocket, 'connected')).playerName, 'OtherRenamed');
+    response = await fetch(base + '/api/game-master/players/' + otherAccountBody.account.accountId + '/rename', {
+      method: 'POST', headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName: 'RenameWhileOnline' })
+    });
+    assert.strictEqual(response.status, 409);
+    onlinePlayerSocket.close();
 
     response = await fetch(base + '/api/ranked-ladder?mode=solo&limit=10', { headers: { Cookie: cookie } });
     assert.strictEqual(response.status, 200);

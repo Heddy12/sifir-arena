@@ -19,6 +19,7 @@ const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const SEASON_MS = 56 * 24 * 60 * 60 * 1000;
 const AVATAR_KEYS = ['hero-blue', 'hero-fire', 'hero-shadow', 'hero-gold', 'mage-cyan', 'knight-red', 'star-green', 'crown-purple'];
 const RANK_MODES = ['solo', 'multiplayer', 'sprint'];
+const ACCOUNT_STATUSES = ['active', 'suspended', 'archived'];
 
 function unavailableError(message) {
   const error = new Error(message || 'Leaderboard database is unavailable');
@@ -97,7 +98,8 @@ function publicAccount(row) {
   return {
     accountId: row.account_id,
     email: row.email,
-    playerName: row.player_name
+    playerName: row.player_name,
+    status: row.account_status || 'active'
   };
 }
 
@@ -174,6 +176,12 @@ async function ensureSchema() {
         player_name_key VARCHAR(20) NOT NULL UNIQUE,
         password_salt VARCHAR(64) NOT NULL,
         password_hash VARCHAR(128) NOT NULL,
+        account_status VARCHAR(16) NOT NULL DEFAULT 'active'
+          CHECK (account_status IN ('active', 'suspended', 'archived')),
+        status_reason VARCHAR(240),
+        suspended_at TIMESTAMPTZ,
+        archived_at TIMESTAMPTZ,
+        last_login_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
@@ -306,7 +314,28 @@ async function ensureSchema() {
         migration_key VARCHAR(80) PRIMARY KEY,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-    `);
+
+      CREATE TABLE IF NOT EXISTS game_master_audit_log (
+        audit_id BIGSERIAL PRIMARY KEY,
+        admin_account_id VARCHAR(80) NOT NULL,
+        admin_email VARCHAR(254) NOT NULL,
+        action VARCHAR(48) NOT NULL,
+        target_account_id VARCHAR(80),
+        target_player_name VARCHAR(20),
+        outcome VARCHAR(16) NOT NULL CHECK (outcome IN ('success', 'failed')),
+        details_json TEXT NOT NULL DEFAULT '{}',
+        ip_address VARCHAR(80),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS game_master_audit_created_idx
+        ON game_master_audit_log(created_at DESC);
+      `);
+    await db.query("ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS account_status VARCHAR(16) NOT NULL DEFAULT 'active'");
+    await db.query('ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS status_reason VARCHAR(240)');
+    await db.query('ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ');
+    await db.query('ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
+    await db.query('ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ');
     await db.query('ALTER TABLE player_bot_rotation DROP CONSTRAINT IF EXISTS player_bot_rotation_next_bot_index_check');
     await db.query('ALTER TABLE player_bot_rotation ADD CONSTRAINT player_bot_rotation_next_bot_index_check CHECK (next_bot_index >= 0)');
     schemaReady = true;
@@ -389,7 +418,7 @@ async function loginAccount(input) {
 
   await ensureSchema();
   const result = await getPool().query(
-    `SELECT account_id, email, player_name, password_salt, password_hash
+    `SELECT account_id, email, player_name, password_salt, password_hash, account_status
      FROM player_accounts WHERE email = $1`,
     [email]
   );
@@ -399,12 +428,15 @@ async function loginAccount(input) {
   const actual = await hashPassword(password, salt);
   const matches = crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
   if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Incorrect email or password.');
+  if (row.account_status === 'suspended') throw authError('ACCOUNT_SUSPENDED', 'This account is suspended. Contact the Game Master.');
+  if (row.account_status === 'archived') throw authError('ACCOUNT_ARCHIVED', 'This account is archived. Contact the Game Master.');
 
   const db = getPool();
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
+    await client.query('UPDATE player_accounts SET last_login_at = NOW(), updated_at = NOW() WHERE account_id = $1', [row.account_id]);
     const token = await createSession(client, row.account_id);
     await client.query('COMMIT');
     return { account: publicAccount(row), token: token };
@@ -513,10 +545,10 @@ async function getAccountBySession(token) {
   if (typeof token !== 'string' || token.length < 32 || token.length > 200) return null;
   await ensureSchema();
   const result = await getPool().query(
-    `SELECT a.account_id, a.email, a.player_name
+    `SELECT a.account_id, a.email, a.player_name, a.account_status
      FROM auth_sessions s
      JOIN player_accounts a ON a.account_id = s.account_id
-     WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
+     WHERE s.token_hash = $1 AND s.expires_at > NOW() AND a.account_status = 'active'`,
     [hashSessionToken(token)]
   );
   return publicAccount(result.rows[0]);
@@ -990,7 +1022,8 @@ async function getLeaderboard(mode, limit) {
             CASE WHEN s.games_played > 0 THEN (s.wins * 100.0) / s.games_played ELSE 0 END AS win_rate
      FROM leaderboard_stats s
      JOIN leaderboard_profiles p ON p.profile_id = s.profile_id
-     WHERE s.mode = $1
+     LEFT JOIN player_accounts a ON a.account_id = s.profile_id
+     WHERE s.mode = $1 AND (a.account_id IS NULL OR a.account_status <> 'archived')
      ORDER BY ${orderBy}
      LIMIT $2`,
     [mode, safeLimit]
@@ -1016,8 +1049,11 @@ function parseJson(value, fallback) {
 
 async function rankPosition(client, seasonId, mode, profileId, rp) {
   const result = await client.query(
-    `SELECT COUNT(*) AS better FROM player_rank_stats
-     WHERE season_id = $1 AND mode = $2 AND (rp > $3 OR (rp = $3 AND profile_id < $4))`,
+    `SELECT COUNT(*) AS better FROM player_rank_stats r
+     LEFT JOIN player_accounts a ON a.account_id = r.profile_id
+     WHERE r.season_id = $1 AND r.mode = $2
+       AND (a.account_id IS NULL OR a.account_status <> 'archived')
+       AND (r.rp > $3 OR (r.rp = $3 AND r.profile_id < $4))`,
     [seasonId, mode, rp, profileId]
   );
   return Number(result.rows[0].better) + 1;
@@ -1035,7 +1071,9 @@ async function getRankedLadder(mode, limit) {
        FROM player_rank_stats r
        JOIN leaderboard_profiles p ON p.profile_id = r.profile_id
        LEFT JOIN player_profile_details d ON d.profile_id = r.profile_id
+       LEFT JOIN player_accounts a ON a.account_id = r.profile_id
        WHERE r.season_id = $1 AND r.mode = $2
+         AND (a.account_id IS NULL OR a.account_status <> 'archived')
        ORDER BY r.rp DESC, r.updated_at ASC, r.profile_id ASC LIMIT $3`,
       [season.season_id, mode, safeLimit]
     );
@@ -1232,7 +1270,7 @@ async function updateProfile(profileId, input) {
   return { avatarKey: result.rows[0].avatar_key, bio: result.rows[0].bio };
 }
 
-async function getPlayerProfile(playerName, viewerProfileId) {
+async function getPlayerProfile(playerName, viewerProfileId, includeArchived) {
   const name = normalizePlayerName(playerName);
   if (!name) return null;
   await ensureSchema();
@@ -1243,8 +1281,11 @@ async function getPlayerProfile(playerName, viewerProfileId) {
               d.current_win_streak, d.best_win_streak
        FROM leaderboard_profiles p
        LEFT JOIN player_profile_details d ON d.profile_id = p.profile_id
-       WHERE LOWER(p.display_name) = $1 LIMIT 1`,
-      [name.toLowerCase()]
+       LEFT JOIN player_accounts a ON a.account_id = p.profile_id
+       WHERE LOWER(p.display_name) = $1
+         AND ($2::boolean OR a.account_id IS NULL OR a.account_status <> 'archived')
+       LIMIT 1`,
+      [name.toLowerCase(), !!includeArchived]
     );
     let profile = result.rows[0];
     if (!profile) return null;
@@ -1579,6 +1620,319 @@ async function recordCompletedMatch(input) {
   }
 }
 
+async function getGameMasterOverview() {
+  await ensureSchema();
+  const result = await getPool().query(
+    `SELECT
+       COUNT(*)::int AS total_players,
+       SUM(CASE WHEN account_status = 'active' THEN 1 ELSE 0 END)::int AS active_players,
+       SUM(CASE WHEN account_status = 'suspended' THEN 1 ELSE 0 END)::int AS suspended_players,
+       SUM(CASE WHEN account_status = 'archived' THEN 1 ELSE 0 END)::int AS archived_players
+     FROM player_accounts`
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const matches = await getPool().query(
+    `SELECT COUNT(DISTINCT match_id)::int AS matches_today
+     FROM player_match_history WHERE played_at >= $1`,
+    [today]
+  );
+  return {
+    totalPlayers: Number(result.rows[0].total_players),
+    activePlayers: Number(result.rows[0].active_players),
+    suspendedPlayers: Number(result.rows[0].suspended_players),
+    archivedPlayers: Number(result.rows[0].archived_players),
+    matchesToday: Number(matches.rows[0].matches_today)
+  };
+}
+
+async function listGameMasterPlayers(input) {
+  await ensureSchema();
+  const query = typeof (input && input.query) === 'string' ? input.query.trim().slice(0, 80) : '';
+  const requestedStatus = typeof (input && input.status) === 'string' ? input.status : '';
+  const statusFilter = ACCOUNT_STATUSES.includes(requestedStatus) ? requestedStatus : null;
+  const page = Math.max(1, Number(input && input.page) || 1);
+  const limit = Math.max(5, Math.min(50, Number(input && input.limit) || 20));
+  const search = query ? '%' + query.toLowerCase() + '%' : null;
+  const parameters = [search, statusFilter];
+  const where = `WHERE ($1::text IS NULL OR LOWER(a.player_name) LIKE $1 OR LOWER(a.email) LIKE $1)
+                   AND ($2::text IS NULL OR a.account_status = $2)`;
+  const totalResult = await getPool().query(`SELECT COUNT(*)::int AS total FROM player_accounts a ${where}`, parameters);
+  const result = await getPool().query(
+    `SELECT a.account_id, a.email, a.player_name, a.account_status, a.status_reason,
+            a.created_at, a.updated_at, a.last_login_at, a.suspended_at, a.archived_at,
+            COALESCE(m.games, 0)::int AS games, COALESCE(m.wins, 0)::int AS wins,
+            h.last_battle_at
+     FROM player_accounts a
+     LEFT JOIN (
+       SELECT profile_id, SUM(games_played) AS games, SUM(wins) AS wins
+       FROM player_mode_stats GROUP BY profile_id
+     ) m ON m.profile_id = a.account_id
+     LEFT JOIN (
+       SELECT profile_id, MAX(played_at) AS last_battle_at
+       FROM player_match_history GROUP BY profile_id
+     ) h ON h.profile_id = a.account_id
+     ${where}
+     ORDER BY COALESCE(a.last_login_at, a.created_at) DESC, a.player_name ASC
+     LIMIT $3 OFFSET $4`,
+    parameters.concat([limit, (page - 1) * limit])
+  );
+  return {
+    page: page,
+    limit: limit,
+    total: Number(totalResult.rows[0].total),
+    players: result.rows.map(function (row) {
+      const games = Number(row.games);
+      const wins = Number(row.wins);
+      return {
+        accountId: row.account_id,
+        email: row.email,
+        playerName: row.player_name,
+        status: row.account_status,
+        statusReason: row.status_reason || '',
+        joinedAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+        lastBattleAt: row.last_battle_at,
+        suspendedAt: row.suspended_at,
+        archivedAt: row.archived_at,
+        games: games,
+        wins: wins,
+        winRate: games ? Math.round(wins * 100 / games) : 0
+      };
+    })
+  };
+}
+
+async function getGameMasterPlayer(accountId, viewerAccountId) {
+  const id = normalizeProfileId(accountId);
+  if (!id) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  await ensureSchema();
+  const result = await getPool().query(
+    `SELECT account_id, email, player_name, account_status, status_reason, created_at,
+            updated_at, last_login_at, suspended_at, archived_at
+     FROM player_accounts WHERE account_id = $1`,
+    [id]
+  );
+  const row = result.rows[0];
+  if (!row) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  const profile = await getPlayerProfile(row.player_name, viewerAccountId, true);
+  return {
+    account: {
+      accountId: row.account_id,
+      email: row.email,
+      playerName: row.player_name,
+      status: row.account_status,
+      statusReason: row.status_reason || '',
+      joinedAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastLoginAt: row.last_login_at,
+      suspendedAt: row.suspended_at,
+      archivedAt: row.archived_at
+    },
+    profile: profile
+  };
+}
+
+async function renameGameMasterPlayer(accountId, playerName) {
+  const id = normalizeProfileId(accountId);
+  const name = normalizePlayerName(playerName);
+  if (!id) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  if (!name) throw authError('INVALID_PLAYER_NAME', 'Player ID must contain 3-20 letters, numbers or _.');
+  if (botCatalog.isReservedBotName(name)) throw authError('PLAYER_NAME_TAKEN', 'That Player ID is reserved.');
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const account = await client.query('SELECT account_id FROM player_accounts WHERE account_id = $1 FOR UPDATE', [id]);
+    if (!account.rows[0]) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+    const duplicate = await client.query(
+      'SELECT account_id FROM player_accounts WHERE player_name_key = $1 AND account_id <> $2',
+      [name.toLowerCase(), id]
+    );
+    if (duplicate.rows[0]) throw authError('PLAYER_NAME_TAKEN', 'That Player ID is already in use.');
+    await client.query(
+      'UPDATE player_accounts SET player_name = $2, player_name_key = $3, updated_at = NOW() WHERE account_id = $1',
+      [id, name, name.toLowerCase()]
+    );
+    await client.query(
+      'UPDATE leaderboard_profiles SET display_name = $2, updated_at = NOW() WHERE profile_id = $1',
+      [id, name]
+    );
+    await client.query('COMMIT');
+    return { accountId: id, playerName: name };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(function () {});
+    if (error.code === '23505') throw authError('PLAYER_NAME_TAKEN', 'That Player ID is already in use.');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function setGameMasterPlayerStatus(accountId, statusValue, reasonValue) {
+  const id = normalizeProfileId(accountId);
+  const accountStatus = ACCOUNT_STATUSES.includes(statusValue) ? statusValue : null;
+  const reason = typeof reasonValue === 'string' ? reasonValue.replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+  if (!id) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  if (!accountStatus) throw authError('INVALID_ACCOUNT_STATUS', 'Invalid account status.');
+  if ((accountStatus === 'suspended' || accountStatus === 'archived') && !reason) {
+    throw authError('INVALID_STATUS_REASON', 'A reason is required.');
+  }
+  await ensureSchema();
+  const result = await getPool().query(
+    `UPDATE player_accounts SET account_status = $2, status_reason = $3,
+       suspended_at = CASE WHEN $2 = 'suspended' THEN NOW() ELSE NULL END,
+       archived_at = CASE WHEN $2 = 'archived' THEN NOW() ELSE NULL END,
+       updated_at = NOW()
+     WHERE account_id = $1
+     RETURNING account_id, player_name, account_status, status_reason`,
+    [id, accountStatus, accountStatus === 'active' ? null : reason]
+  );
+  if (!result.rows[0]) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  if (accountStatus !== 'active') {
+    await getPool().query('DELETE FROM auth_sessions WHERE account_id = $1', [id]);
+  }
+  return {
+    accountId: result.rows[0].account_id,
+    playerName: result.rows[0].player_name,
+    status: result.rows[0].account_status,
+    statusReason: result.rows[0].status_reason || ''
+  };
+}
+
+async function createGameMasterPasswordReset(accountId) {
+  const id = normalizeProfileId(accountId);
+  if (!id) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  await ensureSchema();
+  const result = await getPool().query('SELECT email FROM player_accounts WHERE account_id = $1', [id]);
+  if (!result.rows[0]) throw authError('PROFILE_NOT_FOUND', 'Player account not found.');
+  return createPasswordReset({ email: result.rows[0].email });
+}
+
+async function writeGameMasterAudit(input) {
+  await ensureSchema();
+  const details = input && input.details && typeof input.details === 'object' ? input.details : {};
+  await getPool().query(
+    `INSERT INTO game_master_audit_log
+       (admin_account_id, admin_email, action, target_account_id, target_player_name, outcome, details_json, ip_address)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      normalizeProfileId(input && input.adminAccountId) || 'unknown_admin',
+      normalizeEmail(input && input.adminEmail) || 'unknown@example.invalid',
+      String(input && input.action || 'unknown').slice(0, 48),
+      normalizeProfileId(input && input.targetAccountId),
+      input && input.targetPlayerName ? normalizeName(input.targetPlayerName) : null,
+      input && input.outcome === 'failed' ? 'failed' : 'success',
+      JSON.stringify(details).slice(0, 4000),
+      String(input && input.ipAddress || '').slice(0, 80) || null
+    ]
+  );
+}
+
+async function listGameMasterAudit(limitValue) {
+  await ensureSchema();
+  const limit = Math.max(10, Math.min(200, Number(limitValue) || 50));
+  const result = await getPool().query(
+    `SELECT audit_id, admin_email, action, target_account_id, target_player_name,
+            outcome, details_json, created_at
+     FROM game_master_audit_log ORDER BY created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return result.rows.map(function (row) {
+    return {
+      id: String(row.audit_id),
+      adminEmail: row.admin_email,
+      action: row.action,
+      targetAccountId: row.target_account_id,
+      targetPlayerName: row.target_player_name,
+      outcome: row.outcome,
+      details: parseJson(row.details_json, {}),
+      createdAt: row.created_at
+    };
+  });
+}
+
+async function getGameMasterSeason() {
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    const season = await ensureCurrentSeason(client);
+    const counts = await client.query(
+      `SELECT mode, COUNT(*)::int AS ranked_players
+       FROM player_rank_stats WHERE season_id = $1 GROUP BY mode`,
+      [season.season_id]
+    );
+    return {
+      number: Number(season.season_number),
+      startsAt: season.starts_at,
+      endsAt: season.ends_at,
+      modes: counts.rows.reduce(function (all, row) {
+        all[row.mode] = Number(row.ranked_players);
+        return all;
+      }, { solo: 0, multiplayer: 0, sprint: 0 })
+    };
+  } finally {
+    client.release();
+  }
+}
+
+async function listGameMasterBots() {
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    const season = await ensureCurrentSeason(client);
+    const ids = botCatalog.BOT_PROFILES.map(function (bot) { return bot.profileId; });
+    const result = await client.query(
+      `SELECT p.profile_id, p.display_name, r.mode, r.rp,
+              COALESCE(m.games_played, 0) AS games, COALESCE(m.wins, 0) AS wins,
+              MAX(h.played_at) AS last_battle_at
+       FROM leaderboard_profiles p
+       LEFT JOIN player_rank_stats r ON r.profile_id = p.profile_id AND r.season_id = $1
+       LEFT JOIN player_mode_stats m ON m.profile_id = p.profile_id AND m.mode = r.mode
+       LEFT JOIN player_match_history h ON h.profile_id = p.profile_id
+       WHERE p.profile_id = ANY($2::text[])
+       GROUP BY p.profile_id, p.display_name, r.mode, r.rp, m.games_played, m.wins
+       ORDER BY p.display_name, r.mode`,
+      [season.season_id, ids]
+    );
+    const bots = {};
+    botCatalog.BOT_PROFILES.forEach(function (bot) {
+      bots[bot.profileId] = {
+        name: bot.name,
+        level: bot.level,
+        league: !!bot.league,
+        lastBattleAt: null,
+        modes: {}
+      };
+    });
+    result.rows.forEach(function (row) {
+      if (!bots[row.profile_id]) {
+        const catalog = botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === row.profile_id; });
+        bots[row.profile_id] = {
+          name: row.display_name,
+          level: catalog ? catalog.level : 'unknown',
+          league: !!(catalog && catalog.league),
+          lastBattleAt: row.last_battle_at,
+          modes: {}
+        };
+      }
+      if (row.mode) {
+        const games = Number(row.games);
+        const wins = Number(row.wins);
+        bots[row.profile_id].modes[row.mode] = {
+          rp: Number(row.rp),
+          games: games,
+          wins: wins,
+          winRate: games ? Math.round(wins * 100 / games) : 0
+        };
+      }
+    });
+    return Object.values(bots);
+  } finally {
+    client.release();
+  }
+}
+
 function status() {
   return {
     configured: !!connectionString,
@@ -1612,5 +1966,15 @@ module.exports = {
   resetPassword,
   getAccountBySession,
   logoutSession,
+  getGameMasterOverview,
+  listGameMasterPlayers,
+  getGameMasterPlayer,
+  renameGameMasterPlayer,
+  setGameMasterPlayerStatus,
+  createGameMasterPasswordReset,
+  writeGameMasterAudit,
+  listGameMasterAudit,
+  getGameMasterSeason,
+  listGameMasterBots,
   status
 };
