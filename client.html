@@ -874,7 +874,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the season leaderboard.</div>
     <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
-    <div class="quick-match-note" id="quick-match-note">Search for a player for 8 seconds. After meeting a player, complete a 10-opponent rotation before meeting another player. Ranked: All Tables · Random · 6s.</div>
+    <div class="quick-match-note" id="quick-match-note">Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 6s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -2444,8 +2444,8 @@ function applyModeState(mode) {
   document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
-    ? 'Search for a player for 8 seconds. After meeting a player, complete a 10-opponent rotation before meeting another player. Ranked: All Tables · Random · 60s Sprint.'
-    : 'Search for a player for 8 seconds. After meeting a player, complete a 10-opponent rotation before meeting another player. Ranked: All Tables · Random · 6s.';
+    ? 'Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 60s Sprint.'
+    : 'Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 6s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';

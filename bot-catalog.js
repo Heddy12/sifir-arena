@@ -40,6 +40,7 @@ const RETIRED_BOTS = [
 ];
 
 const BOT_PROFILES = MATCHMAKING_BOTS.concat(LEAGUE_BOTS);
+const ROTATION_BOTS = BOT_PROFILES.slice();
 const BOT_NAME_KEYS = new Set(BOT_PROFILES.concat(RETIRED_BOTS).map(function (bot) { return bot.name.toLowerCase(); }));
 
 function randomBetween(min, max, random) {
@@ -77,6 +78,7 @@ function plausibleWrongAnswer(question, random) {
 
 module.exports = {
   BOT_PROFILES,
+  ROTATION_BOTS,
   MATCHMAKING_BOTS,
   LEAGUE_BOTS,
   RETIRED_BOTS,

@@ -251,7 +251,7 @@ function updateCompletedQuickMatchRotation(room, participants, mode) {
     sendToPlayer(human.playerId, {
       type: 'botRotationProgress', mode: mode, active: true,
       completed: Number(room.botRotation.state.completed) || 0,
-      total: botCatalog.MATCHMAKING_BOTS.length,
+      total: botCatalog.ROTATION_BOTS.length,
       position: Number(room.botRotation.state.position) || 1,
       incomplete: true
     });
@@ -454,7 +454,7 @@ function publicRotationState(state) {
   return {
     active: !!state.active,
     completed: Number(state.completed) || 0,
-    total: Number(state.total) || botCatalog.MATCHMAKING_BOTS.length,
+    total: Number(state.total) || botCatalog.ROTATION_BOTS.length,
     position: state.position === null || state.position === undefined ? null : Number(state.position),
     opponentName: state.bot && state.bot.name ? state.bot.name : null
   };
@@ -462,9 +462,9 @@ function publicRotationState(state) {
 
 function fallbackRotationState(profileId, mode) {
   const state = botRotationFallback.get(rotationKey(profileId, mode));
-  if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.MATCHMAKING_BOTS.length, position: null, bot: null };
-  const bot = botCatalog.MATCHMAKING_BOTS[state.index];
-  return { active: !!bot, completed: state.index, total: botCatalog.MATCHMAKING_BOTS.length, position: bot ? state.index + 1 : null, botIndex: state.index, bot: bot || null };
+  if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.ROTATION_BOTS.length, position: null, bot: null };
+  const bot = botCatalog.ROTATION_BOTS[state.index];
+  return { active: !!bot, completed: state.index, total: botCatalog.ROTATION_BOTS.length, position: bot ? state.index + 1 : null, botIndex: state.index, bot: bot || null };
 }
 
 async function beginPlayerBotRotations(participants, mode) {
@@ -477,7 +477,7 @@ async function beginPlayerBotRotations(participants, mode) {
     console.error('Bot rotation persistence unavailable:', error.message);
   }
   humans.forEach(function (participant) {
-    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.MATCHMAKING_BOTS.length, position: 1 });
+    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.ROTATION_BOTS.length, position: 1 });
   });
 }
 
@@ -485,7 +485,7 @@ async function claimPlayerBotRotation(player, mode) {
   if (!player || !player.profileId) return null;
   const key = rotationKey(player.profileId, mode);
   const rawMemory = botRotationFallback.get(key);
-  if (rawMemory && !rawMemory.active && rawMemory.index >= botCatalog.MATCHMAKING_BOTS.length) return null;
+  if (rawMemory && !rawMemory.active && rawMemory.index >= botCatalog.ROTATION_BOTS.length) return null;
   const memory = fallbackRotationState(player.profileId, mode);
   if (memory.active) return memory;
   try {
@@ -506,14 +506,14 @@ async function completePlayerBotRotation(participant, mode, botProfileId) {
   const memory = botRotationFallback.get(key);
   let memoryProgress = null;
   if (memory && memory.active) {
-    const expected = botCatalog.MATCHMAKING_BOTS[memory.index];
+    const expected = botCatalog.ROTATION_BOTS[memory.index];
     if (expected && expected.profileId === botProfileId) {
       memory.index++;
       memory.pendingBotProfileId = null;
-      memory.active = memory.index < botCatalog.MATCHMAKING_BOTS.length;
+      memory.active = memory.index < botCatalog.ROTATION_BOTS.length;
       botRotationFallback.set(key, memory);
       memoryProgress = fallbackRotationState(participant.profileId, mode);
-      if (!memory.active) memoryProgress.completed = botCatalog.MATCHMAKING_BOTS.length;
+      if (!memory.active) memoryProgress.completed = botCatalog.ROTATION_BOTS.length;
     }
   }
   let progress = memoryProgress;
@@ -599,24 +599,26 @@ async function fallbackQuickMatchToBot(playerId) {
   const entry = removeQuickMatchEntry(playerId);
   const player = players[playerId];
   if (!entry || !player || player.roomCode) return;
-  let profile = entry.rotation && entry.rotation.bot
-    ? botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === entry.rotation.bot.profileId; })
+  let rotation = entry.rotation || null;
+  const rotationMode = rotationModeForGame(entry.gameMode);
+  if (!rotation || !rotation.active || !rotation.bot) {
+    await beginPlayerBotRotations([{
+      playerId: playerId,
+      profileId: player.profileId,
+      isBot: false
+    }], rotationMode);
+    rotation = await claimPlayerBotRotation(player, rotationMode);
+  }
+  const profile = rotation && rotation.bot
+    ? botCatalog.ROTATION_BOTS.find(function (bot) { return bot.profileId === rotation.bot.profileId; })
     : null;
   if (!profile) {
-    profile = botCatalog.chooseBot();
-    try {
-      const rankedMode = entry.gameMode === 'sprint' ? 'sprint' : 'multiplayer';
-      const snapshots = await Promise.all(botCatalog.BOT_PROFILES.map(function (bot) { return leaderboard.getRankSnapshot(bot.profileId, rankedMode); }));
-      let closestDistance = Infinity;
-      snapshots.forEach(function (snapshot, index) {
-        const distance = Math.abs(Number(snapshot && snapshot.rp || 600) - Number(entry.rp || 600));
-        if (distance < closestDistance) { closestDistance = distance; profile = botCatalog.BOT_PROFILES[index]; }
-      });
-    } catch (error) {}
+    sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to select the next rotation opponent.' });
+    return;
   }
   if (!players[playerId] || players[playerId].roomCode) return;
   const botId = createBotOpponent(profile);
-  const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode, entry.rotation || null);
+  const room = startQuickMatchRoom(playerId, botId, profile.profileId, entry.gameMode, rotation);
   if (!room) {
     delete players[botId];
     sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to start Quick Match.' });

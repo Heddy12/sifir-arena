@@ -139,20 +139,23 @@ async function run() {
   let rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(rotation.active, true);
   assert.strictEqual(rotation.position, 1);
-  assert.strictEqual(rotation.bot.profileId, botCatalog.MATCHMAKING_BOTS[0].profileId);
+  assert.strictEqual(rotation.bot.profileId, botCatalog.ROTATION_BOTS[0].profileId);
   const repeatedClaim = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(repeatedClaim.bot.profileId, rotation.bot.profileId, 'unfinished bot must repeat');
-  let rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', botCatalog.MATCHMAKING_BOTS[1].profileId);
+  let rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', botCatalog.ROTATION_BOTS[1].profileId);
   assert.strictEqual(rotationProgress.advanced, false, 'wrong bot cannot skip rotation');
-  for (let botIndex = 0; botIndex < botCatalog.MATCHMAKING_BOTS.length; botIndex++) {
+  const rotatedBotIds = [];
+  for (let botIndex = 0; botIndex < botCatalog.ROTATION_BOTS.length; botIndex++) {
     rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
-    assert.strictEqual(rotation.bot.profileId, botCatalog.MATCHMAKING_BOTS[botIndex].profileId);
+    assert.strictEqual(rotation.bot.profileId, botCatalog.ROTATION_BOTS[botIndex].profileId);
+    rotatedBotIds.push(rotation.bot.profileId);
     rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', rotation.bot.profileId);
     assert.strictEqual(rotationProgress.advanced, true);
   }
+  assert.strictEqual(new Set(rotatedBotIds).size, botCatalog.ROTATION_BOTS.length, 'a rotation cycle must not repeat a bot');
   rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(rotation.active, false);
-  assert.strictEqual(rotation.completed, botCatalog.MATCHMAKING_BOTS.length);
+  assert.strictEqual(rotation.completed, botCatalog.ROTATION_BOTS.length);
   const independentSprintRotation = await store.claimBotRotation(registered.account.accountId, 'sprint');
   assert.strictEqual(independentSprintRotation.active, false, 'Sprint rotation must be separate');
 

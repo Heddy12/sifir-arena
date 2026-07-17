@@ -117,7 +117,7 @@ async function run() {
     const rotationState = await rotationStarted;
     assert.strictEqual(rotationState.active, true);
     assert.strictEqual(rotationState.completed, 0);
-    assert.strictEqual(rotationState.total, botCatalog.MATCHMAKING_BOTS.length);
+    assert.strictEqual(rotationState.total, botCatalog.ROTATION_BOTS.length);
     playerB.close();
 
     const rotationSearching = waitForMessage(reconnectedA, 'quickMatchSearching');
@@ -127,7 +127,7 @@ async function run() {
     const forcedSearch = await rotationSearching;
     assert.strictEqual(forcedSearch.rotation.position, 1);
     const forcedMatch = await rotationFound;
-    assert.strictEqual(forcedMatch.opponentName, botCatalog.MATCHMAKING_BOTS[0].name);
+    assert.strictEqual(forcedMatch.opponentName, botCatalog.ROTATION_BOTS[0].name);
     const forcedGame = await rotationStart;
     assert.strictEqual(forcedGame.matchType, 'quick');
     assert.strictEqual(forcedGame.opponentIsBot, true);
@@ -150,6 +150,8 @@ async function run() {
     assert.strictEqual(botGame.gameMode, 'ffa');
     assert.strictEqual(botGame.matchType, 'quick');
     assert.strictEqual(botGame.opponentIsBot, true);
+    assert.strictEqual(botGame.rotation.position, 1, 'a direct bot fallback must start a persisted rotation');
+    assert.strictEqual(botGame.rotation.total, botCatalog.ROTATION_BOTS.length);
     const botTurn = waitForMessage(playerC, 'newTurn');
     playerC.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await botTurn).timer, 6);
@@ -183,6 +185,8 @@ async function run() {
     const sprintGame = await sprintStart;
     assert.strictEqual(sprintGame.gameMode, 'sprint');
     assert.strictEqual(sprintGame.sprint, true);
+    assert.strictEqual(sprintGame.rotation.position, 1, 'Sprint must maintain its own bot rotation');
+    assert.strictEqual(sprintGame.rotation.total, botCatalog.ROTATION_BOTS.length);
     const sprintFirstQuestion = waitForMessage(playerD, 'newTurn');
     playerD.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await sprintFirstQuestion).sprint, true);

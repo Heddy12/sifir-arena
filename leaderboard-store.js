@@ -270,7 +270,8 @@ async function ensureSchema() {
         profile_id VARCHAR(80) NOT NULL REFERENCES leaderboard_profiles(profile_id) ON DELETE CASCADE,
         mode VARCHAR(16) NOT NULL CHECK (mode IN ('multiplayer', 'sprint')),
         active BOOLEAN NOT NULL DEFAULT FALSE,
-        next_bot_index INTEGER NOT NULL DEFAULT 0 CHECK (next_bot_index BETWEEN 0 AND 10),
+        next_bot_index INTEGER NOT NULL DEFAULT 0
+          CONSTRAINT player_bot_rotation_next_bot_index_check CHECK (next_bot_index >= 0),
         pending_bot_profile_id VARCHAR(80),
         cycle_number INTEGER NOT NULL DEFAULT 0 CHECK (cycle_number >= 0),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -306,6 +307,8 @@ async function ensureSchema() {
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await db.query('ALTER TABLE player_bot_rotation DROP CONSTRAINT IF EXISTS player_bot_rotation_next_bot_index_check');
+    await db.query('ALTER TABLE player_bot_rotation ADD CONSTRAINT player_bot_rotation_next_bot_index_check CHECK (next_bot_index >= 0)');
     schemaReady = true;
     lastError = null;
     return true;
@@ -1083,7 +1086,7 @@ function normalizeRotationMode(mode) {
 }
 
 function rotationState(row) {
-  const rotationBots = botCatalog.MATCHMAKING_BOTS;
+  const rotationBots = botCatalog.ROTATION_BOTS;
   const index = row ? Math.max(0, Math.min(rotationBots.length, Number(row.next_bot_index) || 0)) : 0;
   const active = !!(row && row.active && index < rotationBots.length);
   const pending = active && row.pending_bot_profile_id
@@ -1121,7 +1124,7 @@ async function beginBotRotation(profileIds, mode) {
       );
     }
     await client.query('COMMIT');
-    return { active: true, completed: 0, total: botCatalog.MATCHMAKING_BOTS.length };
+    return { active: true, completed: 0, total: botCatalog.ROTATION_BOTS.length };
   } catch (error) {
     await client.query('ROLLBACK').catch(function () {});
     throw unavailableError(error.message);
@@ -1143,19 +1146,19 @@ async function claimBotRotation(profileId, mode) {
       [id, normalizedMode]
     );
     const row = result.rows[0];
-    if (!row || !row.active || Number(row.next_bot_index) >= botCatalog.MATCHMAKING_BOTS.length) {
+    if (!row || !row.active || Number(row.next_bot_index) >= botCatalog.ROTATION_BOTS.length) {
       if (row && row.active) {
         await client.query(
           'UPDATE player_bot_rotation SET active = FALSE, next_bot_index = $3, pending_bot_profile_id = NULL, updated_at = NOW() WHERE profile_id = $1 AND mode = $2',
-          [id, normalizedMode, botCatalog.MATCHMAKING_BOTS.length]
+          [id, normalizedMode, botCatalog.ROTATION_BOTS.length]
         );
       }
       await client.query('COMMIT');
-      return rotationState(row && Object.assign({}, row, { active: false, next_bot_index: botCatalog.MATCHMAKING_BOTS.length }));
+      return rotationState(row && Object.assign({}, row, { active: false, next_bot_index: botCatalog.ROTATION_BOTS.length }));
     }
     const index = Number(row.next_bot_index);
-    const expectedBot = botCatalog.MATCHMAKING_BOTS[index];
-    let pendingBot = botCatalog.MATCHMAKING_BOTS.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; });
+    const expectedBot = botCatalog.ROTATION_BOTS[index];
+    let pendingBot = botCatalog.ROTATION_BOTS.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; });
     if (!pendingBot || pendingBot.profileId !== expectedBot.profileId) {
       pendingBot = expectedBot;
       await client.query(
@@ -1192,8 +1195,8 @@ async function completeBotRotation(profileId, mode, botProfileId) {
       await client.query('COMMIT');
       return Object.assign(rotationState(row), { advanced: false });
     }
-    const nextIndex = Math.min(botCatalog.MATCHMAKING_BOTS.length, Number(row.next_bot_index) + 1);
-    const active = nextIndex < botCatalog.MATCHMAKING_BOTS.length;
+    const nextIndex = Math.min(botCatalog.ROTATION_BOTS.length, Number(row.next_bot_index) + 1);
+    const active = nextIndex < botCatalog.ROTATION_BOTS.length;
     const updated = await client.query(
       `UPDATE player_bot_rotation SET active = $3, next_bot_index = $4,
          pending_bot_profile_id = NULL, updated_at = NOW()
