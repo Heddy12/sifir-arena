@@ -63,6 +63,11 @@ function normalizeBio(value) {
   return bio;
 }
 
+function oddBotRank(value) {
+  const points = Math.max(0, Math.round(Number(value) || 0));
+  return points % 2 === 0 ? points + 1 : points;
+}
+
 function rankInfo(rp, position) {
   const points = Math.max(0, Number(rp) || 0);
   if (points >= 2100 && position && position <= 50) return { key: 'times-immortal', name: 'Times Immortal', division: null };
@@ -569,7 +574,8 @@ async function ensureProfileRows(client, profile, initialRanks) {
   );
   const season = await ensureCurrentSeason(client);
   for (const mode of RANK_MODES) {
-    const initial = initialRanks && Number.isInteger(initialRanks[mode]) ? initialRanks[mode] : (botInitialRank === null ? 600 : botInitialRank);
+    const requestedInitial = initialRanks && Number.isInteger(initialRanks[mode]) ? initialRanks[mode] : (botInitialRank === null ? 600 : botInitialRank);
+    const initial = knownBot ? oddBotRank(requestedInitial) : requestedInitial;
     await client.query(
       `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games, shield_tiers)
        VALUES ($1, $2, $3, $4, $4, 5, $5) ON CONFLICT DO NOTHING`,
@@ -628,7 +634,7 @@ async function upsertProfile(client, profile) {
   return { profileId: profileId, name: name };
 }
 
-const BOT_SEED_RANKS = [350, 500, 650, 800, 1000, 1200, 1400, 1600, 1900, 2200];
+const BOT_SEED_RANKS = [351, 503, 651, 803, 1001, 1201, 1403, 1601];
 const BOT_SEED_AVATARS = ['star-green', 'mage-cyan', 'hero-fire', 'knight-red', 'crown-purple', 'hero-blue', 'hero-shadow', 'hero-gold', 'mage-cyan', 'crown-purple'];
 const BOT_SEED_BIOS = [
   'Learning one table at a time. See you in the arena!',
@@ -799,6 +805,20 @@ async function seedArenaBots() {
       const originalIndex = botCatalog.MATCHMAKING_BOTS.indexOf(bot);
       const initialRank = Number.isInteger(bot.initialRank) ? bot.initialRank : BOT_SEED_RANKS[originalIndex];
       const profile = await ensureProfileRows(client, bot, { solo: initialRank, multiplayer: initialRank, sprint: initialRank });
+      const existingRanks = await client.query(
+        'SELECT season_id, mode, rp, peak_rp FROM player_rank_stats WHERE profile_id = $1',
+        [profile.profileId]
+      );
+      for (const rankRow of existingRanks.rows) {
+        const oddRp = oddBotRank(rankRow.rp);
+        const oddPeak = oddBotRank(Math.max(Number(rankRow.peak_rp) || 0, oddRp));
+        if (oddRp === Number(rankRow.rp) && oddPeak === Number(rankRow.peak_rp)) continue;
+        await client.query(
+          `UPDATE player_rank_stats SET rp = $4, peak_rp = $5, updated_at = NOW()
+           WHERE profile_id = $1 AND season_id = $2 AND mode = $3`,
+          [profile.profileId, rankRow.season_id, rankRow.mode, oddRp, oddPeak]
+        );
+      }
       if (bot.league) {
         await client.query(
           `UPDATE player_profile_details
@@ -1443,6 +1463,10 @@ async function recordCompletedMatch(input) {
           delta = after - before;
           shieldUsed = true;
           shields = shields.filter(function (key) { return key !== beforeInfo.key; });
+        }
+        if (botCatalog.BOT_PROFILES.some(function (bot) { return bot.profileId === participant.profileId; })) {
+          after = oddBotRank(after);
+          delta = after - before;
         }
         await client.query(
           `UPDATE player_rank_stats SET rp = $4, peak_rp = GREATEST(peak_rp, $4),

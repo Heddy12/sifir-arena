@@ -25,7 +25,7 @@ async function run() {
   const leagueBotA = botCatalog.LEAGUE_BOTS[0];
   const leagueBotB = botCatalog.LEAGUE_BOTS[botCatalog.LEAGUE_BOTS.length - 1];
   const initialLeagueRank = await store.getRankSnapshot(leagueBotA.profileId, 'multiplayer');
-  assert.strictEqual(initialLeagueRank.rp, 0, 'new league bots must begin at the lowest rank');
+  assert.strictEqual(initialLeagueRank.rp, 1, 'new league bots must begin at the lowest rank with a natural-looking odd RP');
   const leagueResult = await botLeague.runLeagueSlot(store, 0, function () { return 0.5; });
   assert.strictEqual(leagueResult.recorded, true);
   assert.strictEqual(leagueResult.rankResults.length, 2);
@@ -39,6 +39,8 @@ async function run() {
     leagueProfileA.ranks.multiplayer.rp > initialLeagueRank.rp || leagueProfileB.ranks.multiplayer.rp > initialLeagueRank.rp,
     'the winning bot should gain rank points'
   );
+  assert.strictEqual(leagueProfileA.ranks.multiplayer.rp % 2, 1);
+  assert.strictEqual(leagueProfileB.ranks.multiplayer.rp % 2, 1);
 
   const registered = await store.registerAccount({
     email: 'G-97558615@moe-dl.edu.my',
@@ -113,6 +115,7 @@ async function run() {
   const seededBot = botCatalog.BOT_PROFILES[0];
   const seededBotProfile = await store.getPlayerProfile(seededBot.name, registered.account.accountId);
   assert.strictEqual(seededBotProfile.isOwner, false);
+  assert.strictEqual(seededBotProfile.ranks.multiplayer.rp % 2, 1, 'seeded bot RP should look organic');
   assert.ok(seededBotProfile.overview.totalGames > 0);
   assert.ok(seededBotProfile.modes.multiplayer.gamesPlayed > 0);
   assert.ok(seededBotProfile.modes.sprint.gamesPlayed > 0);
