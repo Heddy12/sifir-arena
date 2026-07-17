@@ -117,7 +117,7 @@ async function run() {
     const rotationState = await rotationStarted;
     assert.strictEqual(rotationState.active, true);
     assert.strictEqual(rotationState.completed, 0);
-    assert.strictEqual(rotationState.total, botCatalog.BOT_PROFILES.length);
+    assert.strictEqual(rotationState.total, botCatalog.MATCHMAKING_BOTS.length);
     playerB.close();
 
     const rotationSearching = waitForMessage(reconnectedA, 'quickMatchSearching');
@@ -127,7 +127,7 @@ async function run() {
     const forcedSearch = await rotationSearching;
     assert.strictEqual(forcedSearch.rotation.position, 1);
     const forcedMatch = await rotationFound;
-    assert.strictEqual(forcedMatch.opponentName, botCatalog.BOT_PROFILES[0].name);
+    assert.strictEqual(forcedMatch.opponentName, botCatalog.MATCHMAKING_BOTS[0].name);
     const forcedGame = await rotationStart;
     assert.strictEqual(forcedGame.matchType, 'quick');
     assert.strictEqual(forcedGame.opponentIsBot, true);

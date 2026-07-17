@@ -560,6 +560,8 @@ async function ensureCurrentSeason(client) {
 
 async function ensureProfileRows(client, profile, initialRanks) {
   const normalized = await upsertProfile(client, profile);
+  const knownBot = botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === normalized.profileId; });
+  const botInitialRank = knownBot && Number.isInteger(knownBot.initialRank) ? knownBot.initialRank : null;
   await client.query(
     `INSERT INTO player_profile_details (profile_id) VALUES ($1)
      ON CONFLICT (profile_id) DO NOTHING`,
@@ -567,7 +569,7 @@ async function ensureProfileRows(client, profile, initialRanks) {
   );
   const season = await ensureCurrentSeason(client);
   for (const mode of RANK_MODES) {
-    const initial = initialRanks && Number.isInteger(initialRanks[mode]) ? initialRanks[mode] : 600;
+    const initial = initialRanks && Number.isInteger(initialRanks[mode]) ? initialRanks[mode] : (botInitialRank === null ? 600 : botInitialRank);
     await client.query(
       `INSERT INTO player_rank_stats (profile_id, season_id, mode, rp, peak_rp, placement_games, shield_tiers)
        VALUES ($1, $2, $3, $4, $4, 5, $5) ON CONFLICT DO NOTHING`,
@@ -791,7 +793,17 @@ async function seedArenaBots() {
     await client.query('BEGIN');
     for (let index = 0; index < botCatalog.BOT_PROFILES.length; index++) {
       const bot = botCatalog.BOT_PROFILES[index];
-      const profile = await ensureProfileRows(client, bot, { solo: 600, multiplayer: BOT_SEED_RANKS[index], sprint: BOT_SEED_RANKS[index] });
+      const originalIndex = botCatalog.MATCHMAKING_BOTS.indexOf(bot);
+      const initialRank = Number.isInteger(bot.initialRank) ? bot.initialRank : BOT_SEED_RANKS[originalIndex];
+      const profile = await ensureProfileRows(client, bot, { solo: initialRank, multiplayer: initialRank, sprint: initialRank });
+      if (bot.league) {
+        await client.query(
+          `UPDATE player_profile_details
+           SET avatar_key = $2, bio = $3, updated_at = NOW()
+           WHERE profile_id = $1 AND bio = ''`,
+          [profile.profileId, BOT_SEED_AVATARS[index % BOT_SEED_AVATARS.length], 'Strong challenger. Starting from the lowest rank and earning every point.']
+        );
+      }
       for (const mode of ['multiplayer', 'sprint']) {
         await client.query(
           `INSERT INTO leaderboard_stats (profile_id, mode, wins, games_played, updated_at)
@@ -804,8 +816,8 @@ async function seedArenaBots() {
     const activitySeeded = await client.query("SELECT 1 FROM app_migrations WHERE migration_key = 'bot_profile_activity_v1'");
     if (!activitySeeded.rows[0]) {
       const season = await ensureCurrentSeason(client);
-      for (let index = 0; index < botCatalog.BOT_PROFILES.length; index++) {
-        const bot = botCatalog.BOT_PROFILES[index];
+      for (let index = 0; index < botCatalog.MATCHMAKING_BOTS.length; index++) {
+        const bot = botCatalog.MATCHMAKING_BOTS[index];
         const rankResult = await client.query(
           `SELECT rp FROM player_rank_stats WHERE profile_id = $1 AND season_id = $2 AND mode = 'multiplayer'`,
           [bot.profileId, season.season_id]
@@ -1024,16 +1036,17 @@ function normalizeRotationMode(mode) {
 }
 
 function rotationState(row) {
-  const index = row ? Math.max(0, Math.min(botCatalog.BOT_PROFILES.length, Number(row.next_bot_index) || 0)) : 0;
-  const active = !!(row && row.active && index < botCatalog.BOT_PROFILES.length);
+  const rotationBots = botCatalog.MATCHMAKING_BOTS;
+  const index = row ? Math.max(0, Math.min(rotationBots.length, Number(row.next_bot_index) || 0)) : 0;
+  const active = !!(row && row.active && index < rotationBots.length);
   const pending = active && row.pending_bot_profile_id
-    ? botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; })
+    ? rotationBots.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; })
     : null;
-  const bot = active ? (pending || botCatalog.BOT_PROFILES[index]) : null;
+  const bot = active ? (pending || rotationBots[index]) : null;
   return {
     active: active,
-    completed: active ? index : (row && Number(row.next_bot_index) >= botCatalog.BOT_PROFILES.length ? botCatalog.BOT_PROFILES.length : 0),
-    total: botCatalog.BOT_PROFILES.length,
+    completed: active ? index : (row && Number(row.next_bot_index) >= rotationBots.length ? rotationBots.length : 0),
+    total: rotationBots.length,
     position: active ? index + 1 : null,
     botIndex: active ? index : null,
     bot: bot ? { profileId: bot.profileId, name: bot.name, level: bot.level } : null,
@@ -1061,7 +1074,7 @@ async function beginBotRotation(profileIds, mode) {
       );
     }
     await client.query('COMMIT');
-    return { active: true, completed: 0, total: botCatalog.BOT_PROFILES.length };
+    return { active: true, completed: 0, total: botCatalog.MATCHMAKING_BOTS.length };
   } catch (error) {
     await client.query('ROLLBACK').catch(function () {});
     throw unavailableError(error.message);
@@ -1083,19 +1096,19 @@ async function claimBotRotation(profileId, mode) {
       [id, normalizedMode]
     );
     const row = result.rows[0];
-    if (!row || !row.active || Number(row.next_bot_index) >= botCatalog.BOT_PROFILES.length) {
+    if (!row || !row.active || Number(row.next_bot_index) >= botCatalog.MATCHMAKING_BOTS.length) {
       if (row && row.active) {
         await client.query(
           'UPDATE player_bot_rotation SET active = FALSE, next_bot_index = $3, pending_bot_profile_id = NULL, updated_at = NOW() WHERE profile_id = $1 AND mode = $2',
-          [id, normalizedMode, botCatalog.BOT_PROFILES.length]
+          [id, normalizedMode, botCatalog.MATCHMAKING_BOTS.length]
         );
       }
       await client.query('COMMIT');
-      return rotationState(row && Object.assign({}, row, { active: false, next_bot_index: botCatalog.BOT_PROFILES.length }));
+      return rotationState(row && Object.assign({}, row, { active: false, next_bot_index: botCatalog.MATCHMAKING_BOTS.length }));
     }
     const index = Number(row.next_bot_index);
-    const expectedBot = botCatalog.BOT_PROFILES[index];
-    let pendingBot = botCatalog.BOT_PROFILES.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; });
+    const expectedBot = botCatalog.MATCHMAKING_BOTS[index];
+    let pendingBot = botCatalog.MATCHMAKING_BOTS.find(function (bot) { return bot.profileId === row.pending_bot_profile_id; });
     if (!pendingBot || pendingBot.profileId !== expectedBot.profileId) {
       pendingBot = expectedBot;
       await client.query(
@@ -1132,8 +1145,8 @@ async function completeBotRotation(profileId, mode, botProfileId) {
       await client.query('COMMIT');
       return Object.assign(rotationState(row), { advanced: false });
     }
-    const nextIndex = Math.min(botCatalog.BOT_PROFILES.length, Number(row.next_bot_index) + 1);
-    const active = nextIndex < botCatalog.BOT_PROFILES.length;
+    const nextIndex = Math.min(botCatalog.MATCHMAKING_BOTS.length, Number(row.next_bot_index) + 1);
+    const active = nextIndex < botCatalog.MATCHMAKING_BOTS.length;
     const updated = await client.query(
       `UPDATE player_bot_rotation SET active = $3, next_bot_index = $4,
          pending_bot_profile_id = NULL, updated_at = NOW()

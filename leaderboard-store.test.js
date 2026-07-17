@@ -3,6 +3,7 @@
 const assert = require('assert');
 const { newDb } = require('pg-mem');
 const botCatalog = require('./bot-catalog');
+const botLeague = require('./bot-league');
 
 async function run() {
   process.env.DATABASE_URL = 'postgresql://leaderboard-test';
@@ -18,6 +19,24 @@ async function run() {
   delete require.cache[storePath];
   let store = require('./leaderboard-store');
   assert.strictEqual(await store.initialize(), true);
+
+  const leagueBotA = botCatalog.LEAGUE_BOTS[0];
+  const leagueBotB = botCatalog.LEAGUE_BOTS[botCatalog.LEAGUE_BOTS.length - 1];
+  const initialLeagueRank = await store.getRankSnapshot(leagueBotA.profileId, 'multiplayer');
+  assert.strictEqual(initialLeagueRank.rp, 0, 'new league bots must begin at the lowest rank');
+  const leagueResult = await botLeague.runLeagueSlot(store, 0, function () { return 0.5; });
+  assert.strictEqual(leagueResult.recorded, true);
+  assert.strictEqual(leagueResult.rankResults.length, 2);
+  const leagueProfileA = await store.getPlayerProfile(leagueBotA.name, null);
+  const leagueProfileB = await store.getPlayerProfile(leagueBotB.name, null);
+  assert.strictEqual(leagueProfileA.history.length, 1);
+  assert.strictEqual(leagueProfileB.history.length, 1);
+  assert.strictEqual(leagueProfileA.modes.multiplayer.gamesPlayed, 1);
+  assert.strictEqual(leagueProfileB.modes.multiplayer.gamesPlayed, 1);
+  assert.ok(
+    leagueProfileA.ranks.multiplayer.rp > initialLeagueRank.rp || leagueProfileB.ranks.multiplayer.rp > initialLeagueRank.rp,
+    'the winning bot should gain rank points'
+  );
 
   const registered = await store.registerAccount({
     email: 'G-97558615@moe-dl.edu.my',
@@ -112,20 +131,20 @@ async function run() {
   let rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(rotation.active, true);
   assert.strictEqual(rotation.position, 1);
-  assert.strictEqual(rotation.bot.profileId, botCatalog.BOT_PROFILES[0].profileId);
+  assert.strictEqual(rotation.bot.profileId, botCatalog.MATCHMAKING_BOTS[0].profileId);
   const repeatedClaim = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(repeatedClaim.bot.profileId, rotation.bot.profileId, 'unfinished bot must repeat');
-  let rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', botCatalog.BOT_PROFILES[1].profileId);
+  let rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', botCatalog.MATCHMAKING_BOTS[1].profileId);
   assert.strictEqual(rotationProgress.advanced, false, 'wrong bot cannot skip rotation');
-  for (let botIndex = 0; botIndex < botCatalog.BOT_PROFILES.length; botIndex++) {
+  for (let botIndex = 0; botIndex < botCatalog.MATCHMAKING_BOTS.length; botIndex++) {
     rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
-    assert.strictEqual(rotation.bot.profileId, botCatalog.BOT_PROFILES[botIndex].profileId);
+    assert.strictEqual(rotation.bot.profileId, botCatalog.MATCHMAKING_BOTS[botIndex].profileId);
     rotationProgress = await store.completeBotRotation(registered.account.accountId, 'multiplayer', rotation.bot.profileId);
     assert.strictEqual(rotationProgress.advanced, true);
   }
   rotation = await store.claimBotRotation(registered.account.accountId, 'multiplayer');
   assert.strictEqual(rotation.active, false);
-  assert.strictEqual(rotation.completed, botCatalog.BOT_PROFILES.length);
+  assert.strictEqual(rotation.completed, botCatalog.MATCHMAKING_BOTS.length);
   const independentSprintRotation = await store.claimBotRotation(registered.account.accountId, 'sprint');
   assert.strictEqual(independentSprintRotation.active, false, 'Sprint rotation must be separate');
 

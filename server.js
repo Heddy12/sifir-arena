@@ -18,6 +18,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const leaderboard = require('./leaderboard-store');
 const botCatalog = require('./bot-catalog');
+const botLeague = require('./bot-league');
 const emailService = require('./email-service');
 
 const PORT = process.env.PORT || 3000;
@@ -46,7 +47,17 @@ const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONN
 const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
 
 leaderboard.initialize().then(function (ready) {
-  if (ready) console.log('Leaderboard database ready');
+  if (ready) {
+    console.log('Leaderboard database ready');
+    botLeague.start(leaderboard, {
+      onRecorded: function (result, slot) {
+        console.log('Bot league match recorded:', slot);
+      },
+      onError: function (error) {
+        console.error('Bot league match was not saved:', error.message);
+      }
+    });
+  }
   else console.log('Leaderboard disabled: DATABASE_URL is not configured');
 }).catch(function (error) {
   console.error('Leaderboard database unavailable:', error.message);
@@ -237,7 +248,7 @@ function updateCompletedQuickMatchRotation(room, participants, mode) {
     sendToPlayer(human.playerId, {
       type: 'botRotationProgress', mode: mode, active: true,
       completed: Number(room.botRotation.state.completed) || 0,
-      total: botCatalog.BOT_PROFILES.length,
+      total: botCatalog.MATCHMAKING_BOTS.length,
       position: Number(room.botRotation.state.position) || 1,
       incomplete: true
     });
@@ -438,7 +449,7 @@ function publicRotationState(state) {
   return {
     active: !!state.active,
     completed: Number(state.completed) || 0,
-    total: Number(state.total) || botCatalog.BOT_PROFILES.length,
+    total: Number(state.total) || botCatalog.MATCHMAKING_BOTS.length,
     position: state.position === null || state.position === undefined ? null : Number(state.position),
     opponentName: state.bot && state.bot.name ? state.bot.name : null
   };
@@ -446,9 +457,9 @@ function publicRotationState(state) {
 
 function fallbackRotationState(profileId, mode) {
   const state = botRotationFallback.get(rotationKey(profileId, mode));
-  if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.BOT_PROFILES.length, position: null, bot: null };
-  const bot = botCatalog.BOT_PROFILES[state.index];
-  return { active: !!bot, completed: state.index, total: botCatalog.BOT_PROFILES.length, position: bot ? state.index + 1 : null, botIndex: state.index, bot: bot || null };
+  if (!state || !state.active) return { active: false, completed: state ? state.index : 0, total: botCatalog.MATCHMAKING_BOTS.length, position: null, bot: null };
+  const bot = botCatalog.MATCHMAKING_BOTS[state.index];
+  return { active: !!bot, completed: state.index, total: botCatalog.MATCHMAKING_BOTS.length, position: bot ? state.index + 1 : null, botIndex: state.index, bot: bot || null };
 }
 
 async function beginPlayerBotRotations(participants, mode) {
@@ -461,7 +472,7 @@ async function beginPlayerBotRotations(participants, mode) {
     console.error('Bot rotation persistence unavailable:', error.message);
   }
   humans.forEach(function (participant) {
-    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.BOT_PROFILES.length, position: 1 });
+    sendToPlayer(participant.playerId, { type: 'botRotationProgress', mode: mode, active: true, completed: 0, total: botCatalog.MATCHMAKING_BOTS.length, position: 1 });
   });
 }
 
@@ -469,7 +480,7 @@ async function claimPlayerBotRotation(player, mode) {
   if (!player || !player.profileId) return null;
   const key = rotationKey(player.profileId, mode);
   const rawMemory = botRotationFallback.get(key);
-  if (rawMemory && !rawMemory.active && rawMemory.index >= botCatalog.BOT_PROFILES.length) return null;
+  if (rawMemory && !rawMemory.active && rawMemory.index >= botCatalog.MATCHMAKING_BOTS.length) return null;
   const memory = fallbackRotationState(player.profileId, mode);
   if (memory.active) return memory;
   try {
@@ -490,14 +501,14 @@ async function completePlayerBotRotation(participant, mode, botProfileId) {
   const memory = botRotationFallback.get(key);
   let memoryProgress = null;
   if (memory && memory.active) {
-    const expected = botCatalog.BOT_PROFILES[memory.index];
+    const expected = botCatalog.MATCHMAKING_BOTS[memory.index];
     if (expected && expected.profileId === botProfileId) {
       memory.index++;
       memory.pendingBotProfileId = null;
-      memory.active = memory.index < botCatalog.BOT_PROFILES.length;
+      memory.active = memory.index < botCatalog.MATCHMAKING_BOTS.length;
       botRotationFallback.set(key, memory);
       memoryProgress = fallbackRotationState(participant.profileId, mode);
-      if (!memory.active) memoryProgress.completed = botCatalog.BOT_PROFILES.length;
+      if (!memory.active) memoryProgress.completed = botCatalog.MATCHMAKING_BOTS.length;
     }
   }
   let progress = memoryProgress;
