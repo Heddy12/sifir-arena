@@ -21,6 +21,9 @@ async function run() {
   assert.strictEqual(await store.initialize(), true);
   assert.strictEqual(await store.getPlayerProfile('SifirStorm76', null), null);
   assert.strictEqual(await store.getPlayerProfile('KuasaNombor39', null), null);
+  const initialMultiplayerLadder = await store.getRankedLadder('multiplayer', 10);
+  assert.strictEqual(initialMultiplayerLadder.entries[3].name, 'TitanSifir95');
+  assert.strictEqual(initialMultiplayerLadder.entries[3].rp % 2, 1);
 
   const leagueBotA = botCatalog.LEAGUE_BOTS[0];
   const leagueBotB = botCatalog.LEAGUE_BOTS[botCatalog.LEAGUE_BOTS.length - 1];

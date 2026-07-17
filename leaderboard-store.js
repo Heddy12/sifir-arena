@@ -649,6 +649,7 @@ const BOT_SEED_BIOS = [
   'Climbing the season rank one victory at a time.'
 ];
 const BOT_SEED_CARDS = ['shield', 'healPotion', 'revealHint', 'doubleStrike', 'timeFreeze', 'streakBoost', 'stealHP', 'secondChance', 'mirrorShield', 'skipQuestion'];
+const FEATURED_TITAN_PROFILE_ID = 'arena_bot_titan_sifir_95';
 
 function clampNumber(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -792,6 +793,28 @@ async function seedBotProfileActivity(client, bot, index, rank) {
   }
 }
 
+async function placeTitanFourth(client) {
+  const season = await ensureCurrentSeason(client);
+  const opponents = await client.query(
+    `SELECT rp FROM player_rank_stats
+     WHERE season_id = $1 AND mode = 'multiplayer' AND profile_id <> $2
+     ORDER BY rp DESC, updated_at ASC, profile_id ASC LIMIT 4`,
+    [season.season_id, FEATURED_TITAN_PROFILE_ID]
+  );
+  if (opponents.rows.length < 3) return;
+  const thirdRp = Number(opponents.rows[2].rp);
+  const fourthRp = opponents.rows[3] ? Number(opponents.rows[3].rp) : Math.max(0, thirdRp - 100);
+  let targetRp = oddBotRank(thirdRp - 1);
+  if (targetRp >= thirdRp) targetRp = Math.max(1, targetRp - 2);
+  if (targetRp <= fourthRp) targetRp = oddBotRank(fourthRp);
+  await client.query(
+    `UPDATE player_rank_stats
+     SET rp = $4, peak_rp = GREATEST(peak_rp, $4), updated_at = NOW()
+     WHERE profile_id = $1 AND season_id = $2 AND mode = $3`,
+    [FEATURED_TITAN_PROFILE_ID, season.season_id, 'multiplayer', targetRp]
+  );
+}
+
 async function seedArenaBots() {
   await ensureSchema();
   const client = await getPool().connect();
@@ -850,6 +873,7 @@ async function seedArenaBots() {
       }
       await client.query("INSERT INTO app_migrations (migration_key) VALUES ('bot_profile_activity_v1')");
     }
+    await placeTitanFourth(client);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch(function () {});
