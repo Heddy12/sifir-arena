@@ -19,6 +19,8 @@ async function run() {
   delete require.cache[storePath];
   let store = require('./leaderboard-store');
   assert.strictEqual(await store.initialize(), true);
+  assert.strictEqual(await store.getPlayerProfile('SifirStorm76', null), null);
+  assert.strictEqual(await store.getPlayerProfile('KuasaNombor39', null), null);
 
   const leagueBotA = botCatalog.LEAGUE_BOTS[0];
   const leagueBotB = botCatalog.LEAGUE_BOTS[botCatalog.LEAGUE_BOTS.length - 1];

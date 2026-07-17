@@ -791,6 +791,9 @@ async function seedArenaBots() {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    for (const retiredBot of botCatalog.RETIRED_BOTS) {
+      await client.query('DELETE FROM leaderboard_profiles WHERE profile_id = $1', [retiredBot.profileId]);
+    }
     for (let index = 0; index < botCatalog.BOT_PROFILES.length; index++) {
       const bot = botCatalog.BOT_PROFILES[index];
       const originalIndex = botCatalog.MATCHMAKING_BOTS.indexOf(bot);

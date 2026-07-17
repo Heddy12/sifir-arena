@@ -6,8 +6,6 @@ const MATCHMAKING_BOTS = [
   { profileId: 'arena_bot_roti_canaix_24', name: 'RotiCanaiX24', level: 'low', accuracyMin: 0.48, accuracyMax: 0.58, responseMin: 0.55, responseMax: 0.92, cardChance: 0.08 },
   { profileId: 'arena_bot_neon_rimba_63', name: 'NeonRimba63', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
   { profileId: 'arena_bot_awan_byte_52', name: 'AwanByte52', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
-  { profileId: 'arena_bot_sifir_storm_76', name: 'SifirStorm76', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
-  { profileId: 'arena_bot_kuasa_nombor_39', name: 'KuasaNombor39', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
   { profileId: 'arena_bot_zero_lag_zara_91', name: 'ZeroLagZara91', level: 'smart', accuracyMin: 0.90, accuracyMax: 0.97, responseMin: 0.15, responseMax: 0.40, cardChance: 0.55 },
   { profileId: 'arena_bot_quantum_kid_88', name: 'QuantumKid88', level: 'smart', accuracyMin: 0.90, accuracyMax: 0.97, responseMin: 0.15, responseMax: 0.40, cardChance: 0.55 },
   { profileId: 'arena_bot_titan_sifir_95', name: 'TitanSifir95', level: 'smart', accuracyMin: 0.90, accuracyMax: 0.97, responseMin: 0.15, responseMax: 0.40, cardChance: 0.55 }
@@ -36,8 +34,13 @@ const LEAGUE_BOTS = [
   { profileId: 'arena_bot_senah_20', name: 'Senah20', level: 'smart', league: true, initialRank: 0, accuracyMin: 0.93, accuracyMax: 0.99, responseMin: 0.10, responseMax: 0.27, cardChance: 0.77 }
 ];
 
+const RETIRED_BOTS = [
+  { profileId: 'arena_bot_sifir_storm_76', name: 'SifirStorm76' },
+  { profileId: 'arena_bot_kuasa_nombor_39', name: 'KuasaNombor39' }
+];
+
 const BOT_PROFILES = MATCHMAKING_BOTS.concat(LEAGUE_BOTS);
-const BOT_NAME_KEYS = new Set(BOT_PROFILES.map(function (bot) { return bot.name.toLowerCase(); }));
+const BOT_NAME_KEYS = new Set(BOT_PROFILES.concat(RETIRED_BOTS).map(function (bot) { return bot.name.toLowerCase(); }));
 
 function randomBetween(min, max, random) {
   return min + (max - min) * (random || Math.random)();
@@ -76,6 +79,7 @@ module.exports = {
   BOT_PROFILES,
   MATCHMAKING_BOTS,
   LEAGUE_BOTS,
+  RETIRED_BOTS,
   chooseBot,
   createBotInstance,
   isReservedBotName,
