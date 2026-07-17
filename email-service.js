@@ -22,8 +22,18 @@ function smtpConfiguration() {
   };
 }
 
+function webhookConfiguration() {
+  const url = String(process.env.EMAIL_WEBHOOK_URL || '').trim();
+  const secret = String(process.env.EMAIL_WEBHOOK_SECRET || '');
+  return {
+    configured: /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url) && secret.length >= 32,
+    url: url,
+    secret: secret
+  };
+}
+
 function isConfigured() {
-  return process.env.NODE_ENV === 'test' || smtpConfiguration().configured;
+  return process.env.NODE_ENV === 'test' || webhookConfiguration().configured || smtpConfiguration().configured;
 }
 
 function getTransporter() {
@@ -49,6 +59,26 @@ async function sendPasswordResetCode(email, code) {
   if (process.env.NODE_ENV === 'test') {
     testMessages.push({ email: email, code: code });
     return true;
+  }
+  const webhook = webhookConfiguration();
+  if (webhook.configured) {
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 15000);
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ secret: webhook.secret, email: email, code: code }),
+        redirect: 'follow',
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error('Email webhook returned HTTP ' + response.status);
+      const body = await response.json().catch(function () { return {}; });
+      if (!body.ok) throw new Error('Email webhook rejected the request');
+      return true;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   const config = smtpConfiguration();
   const mailer = getTransporter();
