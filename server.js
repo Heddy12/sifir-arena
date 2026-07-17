@@ -41,6 +41,7 @@ const WRONG_DAMAGE = 5;
 const TIMEOUT_DAMAGE = 8;
 const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
+const TIME_FREEZE_SECONDS = 3;
 const MULTIPLAYER_TURN_SECONDS = 6;
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
@@ -66,16 +67,16 @@ leaderboard.initialize().then(function (ready) {
 
 /* ==================== CARD POOL ==================== */
 const CARD_POOL = [
-  { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: '2x damage on next correct answer' },
-  { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block next incoming attack' },
-  { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Stop timer for current question' },
-  { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore +20 HP' },
-  { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Show if answer is even or odd' },
-  { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'New question, no penalty' },
-  { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Steal 15 HP from opponent' },
-  { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'No penalty on next wrong answer' },
-  { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: '+3 streak instantly' },
-  { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect damage to opponent (1 turn)' }
+  { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: 'Double all damage from your next correct answer' },
+  { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block the next correct-answer attack against you' },
+  { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Pause the current question timer for 3 seconds' },
+  { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore up to 20 HP (maximum 100 HP)' },
+  { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Reveal whether the current answer is even or odd' },
+  { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'Replace the current question with no penalty' },
+  { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Drain up to 15 HP and restore the HP you can hold' },
+  { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'Cancel the next wrong-answer or timeout penalty' },
+  { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: 'Add 3 to your current streak immediately' },
+  { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect the next correct-answer attack back to its attacker' }
 ];
 
 /* ==================== ROOM MANAGEMENT ==================== */
@@ -403,6 +404,7 @@ function createRoom(playerId, settings) {
     currentPlayer: 0,
     round: 0,
     timerInterval: null,
+    timeFreezeTimeout: null,
     timeLeft: 0,
     questionStartTime: 0,
     battleActive: false,
@@ -732,6 +734,8 @@ function startBattle(room) {
   room.forcedWinnerIdx = null;
   room.forfeitedPlayerId = null;
   room.paused = false;
+  clearTimeout(room.timeFreezeTimeout);
+  room.timeFreezeTimeout = null;
   room.timerFrozen = false;
   room.questionVersion++;
   const p1Id = room.players[0];
@@ -826,6 +830,9 @@ function clearBotActionTimers(room) {
 
 function finishQuestion(room) {
   clearBotActionTimers(room);
+  clearTimeout(room.timeFreezeTimeout);
+  room.timeFreezeTimeout = null;
+  room.timerFrozen = false;
   room.currentQuestion = null;
   room.questionVersion++;
 }
@@ -915,7 +922,7 @@ function handleAnswer(room, playerId, answer) {
   if (playerIdx !== room.currentPlayer) return;
 
   stopTimer(room);
-  const timeTaken = (Date.now() - room.questionStartTime) / 1000;
+  const timeTaken = Math.max(0, Number(room.settings.timer) - Math.max(0, Number(room.timeLeft) || 0));
   const player = room.gameState.players[playerIdx];
   const opponent = room.gameState.players[1 - playerIdx];
   const userAnswer = parseInt(answer);
@@ -1056,14 +1063,29 @@ function handleTimeout(room) {
 
 function handleCardActivate(room, playerId, cardIdx) {
   if (!room.battleActive) return;
+  if (room.gameMode === 'sprint' || !room.currentQuestion) return;
   const playerIdx = players[playerId].playerIdx;
   if (playerIdx !== room.currentPlayer) return;
 
   const player = room.gameState.players[playerIdx];
-  const card = player.cards[cardIdx];
+  const normalizedCardIdx = Number(cardIdx);
+  if (!Number.isInteger(normalizedCardIdx) || normalizedCardIdx < 0 || normalizedCardIdx >= player.cards.length) {
+    sendToPlayer(playerId, { type: 'cardRejected', error: 'That Magic Card is not available.' });
+    return;
+  }
+  const card = player.cards[normalizedCardIdx];
   if (!card || card.used) return;
 
-  let cardResult = { type: 'cardActivated', playerIdx: playerIdx, cardIdx: cardIdx, cardId: card.id, cardName: card.name };
+  if (card.id === 'healPotion' && player.hp >= player.maxHP) {
+    sendToPlayer(playerId, { type: 'cardRejected', cardIdx: normalizedCardIdx, error: 'Heal Potion cannot be used at full HP.' });
+    return;
+  }
+  if (card.id === 'timeFreeze' && room.timerFrozen) {
+    sendToPlayer(playerId, { type: 'cardRejected', cardIdx: normalizedCardIdx, error: 'The timer is already frozen.' });
+    return;
+  }
+
+  let cardResult = { type: 'cardActivated', playerIdx: playerIdx, cardIdx: normalizedCardIdx, cardId: card.id, cardName: card.name };
 
   switch (card.id) {
     case 'doubleStrike':
@@ -1076,6 +1098,17 @@ function handleCardActivate(room, playerId, cardIdx) {
       stopTimer(room);
       room.timerFrozen = true;
       cardResult.timerFrozen = true;
+      cardResult.freezeSeconds = TIME_FREEZE_SECONDS;
+      const frozenQuestionVersion = room.questionVersion;
+      const frozenTimeLeft = Math.max(0.1, Number(room.timeLeft) || Number(room.settings.timer));
+      clearTimeout(room.timeFreezeTimeout);
+      room.timeFreezeTimeout = setTimeout(function () {
+        room.timeFreezeTimeout = null;
+        if (!room.battleActive || !room.currentQuestion || room.questionVersion !== frozenQuestionVersion) return;
+        room.timerFrozen = false;
+        startTimer(room, frozenTimeLeft);
+        broadcast(room, { type: 'timerResumed', timeLeft: frozenTimeLeft });
+      }, TIME_FREEZE_SECONDS * 1000);
       break;
     case 'healPotion':
       var healAmt = Math.min(20, player.maxHP - player.hp);
@@ -1092,9 +1125,11 @@ function handleCardActivate(room, playerId, cardIdx) {
     case 'stealHP':
       var opp = room.gameState.players[1 - playerIdx];
       var steal = Math.min(15, opp.hp);
+      var hpBeforeSteal = player.hp;
       opp.hp -= steal;
       player.hp = Math.min(player.maxHP, player.hp + steal);
       cardResult.steal = steal;
+      cardResult.healed = player.hp - hpBeforeSteal;
       break;
     case 'secondChance':
       player.activeEffects.secondChance = true;
@@ -1324,6 +1359,9 @@ function checkWin(room) {
     if (room.gameState.players[i].hp <= 0) {
       room.battleActive = false;
       stopTimer(room);
+      clearTimeout(room.timeFreezeTimeout);
+      room.timeFreezeTimeout = null;
+      room.timerFrozen = false;
       clearBotActionTimers(room);
       room.currentQuestion = null;
       room.questionVersion++;
@@ -1354,6 +1392,7 @@ function destroyRoom(roomCode) {
   if (!room) return;
   room.battleActive = false;
   clearTimeout(room.countdownFallback);
+  clearTimeout(room.timeFreezeTimeout);
   stopTimer(room);
   clearBotActionTimers(room);
   if (room.sprintInterval) clearInterval(room.sprintInterval);
@@ -1399,6 +1438,9 @@ function pauseRoomForReconnect(room, playerId) {
   room.battleActive = false;
   room.pausedTimeLeft = Math.max(0.1, Number(room.timeLeft) || Number(room.settings.timer) || 20);
   room.pausedSprintTimeLeft = Math.max(1, Number(room.sprintTimeLeft) || Number(room.settings.sprintTime) || SPRINT_DURATION);
+  clearTimeout(room.timeFreezeTimeout);
+  room.timeFreezeTimeout = null;
+  room.timerFrozen = false;
   stopTimer(room);
   if (room.sprintInterval) clearInterval(room.sprintInterval);
   clearBotActionTimers(room);
@@ -2103,4 +2145,17 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server: server, wss: wss };
+module.exports = {
+  server: server,
+  wss: wss,
+  __test: {
+    CARD_POOL: CARD_POOL,
+    TIME_FREEZE_SECONDS: TIME_FREEZE_SECONDS,
+    players: players,
+    handleCardActivate: handleCardActivate,
+    handleCorrect: handleCorrect,
+    handleWrong: handleWrong,
+    handleTimeout: handleTimeout,
+    finishQuestion: finishQuestion
+  }
+};

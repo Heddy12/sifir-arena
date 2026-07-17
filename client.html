@@ -1112,6 +1112,8 @@ var STATE = {
   profileTab: 'overview',
   soloSessionId: null,
   soloCardUsage: {},
+  soloFreezeTimeout: null,
+  soloQuestionVersion: 0,
   homeRankRequestId: 0
 };
 
@@ -1604,16 +1606,16 @@ function saveProfile() {
 }
 
 var CARD_POOL = [
-  { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: '2x damage on next correct answer' },
-  { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block next incoming attack' },
-  { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Stop timer for current question' },
-  { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore +20 HP' },
-  { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Show if answer is even or odd' },
-  { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'New question, no penalty' },
-  { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Steal 15 HP from opponent' },
-  { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'No penalty on next wrong answer' },
-  { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: '+3 streak instantly' },
-  { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect damage to opponent (1 turn)' }
+  { id: 'doubleStrike', name: 'Double Strike', icon: 'X2', category: 'offensive', desc: 'Double all damage from your next correct answer' },
+  { id: 'shield', name: 'Shield', icon: 'SH', category: 'defensive', desc: 'Block the next correct-answer attack against you' },
+  { id: 'timeFreeze', name: 'Time Freeze', icon: 'TF', category: 'support', desc: 'Pause the current question timer for 3 seconds' },
+  { id: 'healPotion', name: 'Heal Potion', icon: 'HP', category: 'recovery', desc: 'Restore up to 20 HP (maximum 100 HP)' },
+  { id: 'revealHint', name: 'Reveal Hint', icon: 'RH', category: 'support', desc: 'Reveal whether the current answer is even or odd' },
+  { id: 'skipQuestion', name: 'Skip Question', icon: 'SQ', category: 'utility', desc: 'Replace the current question with no penalty' },
+  { id: 'stealHP', name: 'Steal HP', icon: 'ST', category: 'offensive', desc: 'Drain up to 15 HP and restore the HP you can hold' },
+  { id: 'secondChance', name: 'Second Chance', icon: 'SC', category: 'defensive', desc: 'Cancel the next wrong-answer or timeout penalty' },
+  { id: 'streakBoost', name: 'Streak Boost', icon: 'SB', category: 'offensive', desc: 'Add 3 to your current streak immediately' },
+  { id: 'mirrorShield', name: 'Mirror Shield', icon: 'MS', category: 'defensive', desc: 'Reflect the next correct-answer attack back to its attacker' }
 ];
 
 /* ==================== SOUND SYSTEM ==================== */
@@ -2052,7 +2054,7 @@ function renderWeakTableReport(report) {
 function startSoloGame() {
   Sound.playBattleMusic();
   var settings = STATE.settings;
-  var playerCards = dealCards();
+  var playerCards = dealCards('solo');
 
   STATE.you = 0;
   STATE.matchType = 'solo';
@@ -2064,6 +2066,9 @@ function startSoloGame() {
   STATE.currentQuestion = null;
   STATE.learningStats = {};
   STATE.soloCardUsage = {};
+  clearTimeout(STATE.soloFreezeTimeout);
+  STATE.soloFreezeTimeout = null;
+  STATE.soloQuestionVersion = 0;
   clearWeakTableReport();
   STATE.players = [
     { name: document.getElementById('player-name').value.trim() || 'Hero', hp: 100, maxHP: 100, score: 0, streak: 0, correct: 0, wrong: 0, cards: playerCards, activeEffects: {} },
@@ -2095,8 +2100,10 @@ function startSoloGame() {
   startCountdown(function () { soloNextTurn(); });
 }
 
-function dealCards() {
-  var shuffled = CARD_POOL.slice();
+function dealCards(mode) {
+  var shuffled = CARD_POOL.filter(function (card) {
+    return mode !== 'solo' || (card.id !== 'shield' && card.id !== 'mirrorShield');
+  });
   var cards = [];
   for (var i = 0; i < 3; i++) {
     var idx = Math.floor(Math.random() * shuffled.length);
@@ -2109,6 +2116,9 @@ function dealCards() {
 
 function soloNextTurn() {
   if (!STATE.battleActive) return;
+  clearTimeout(STATE.soloFreezeTimeout);
+  STATE.soloFreezeTimeout = null;
+  STATE.soloQuestionVersion++;
   STATE.round++;
   STATE.currentPlayer = 0;
   document.getElementById('hdr-round').textContent = STATE.round;
@@ -2161,6 +2171,8 @@ function soloGenerateQuestion() {
 
 function soloHandleAnswer(answer) {
   if (!STATE.battleActive || !STATE.currentQuestion) return;
+  clearTimeout(STATE.soloFreezeTimeout);
+  STATE.soloFreezeTimeout = null;
   stopTimerDisplay();
   var player = STATE.players[0];
   var opponent = STATE.players[1];
@@ -2188,7 +2200,7 @@ function soloHandleCorrect(player, opponent) {
   var damage = 10;
   var bonusMsg = '';
 
-  var timeTaken = STATE.currentQuestion ? (Date.now() - STATE.questionStartTime) / 1000 : 99;
+  var timeTaken = Math.max(0, Number(STATE.settings.timer) - Math.max(0, Number(STATE.timeLeft) || 0));
   if (timeTaken < STATE.settings.timer / 2) { damage += 5; bonusMsg += ' +5 (Fast!)'; }
   if (player.streak >= 5) { damage += 10; bonusMsg += ' +10 (Streak 5!)'; }
   else if (player.streak >= 3) { damage += 5; bonusMsg += ' +5 (Streak 3!)'; }
@@ -2244,6 +2256,8 @@ function soloHandleWrong(player) {
 
 function soloHandleTimeout() {
   if (!STATE.battleActive || !STATE.currentQuestion) return;
+  clearTimeout(STATE.soloFreezeTimeout);
+  STATE.soloFreezeTimeout = null;
   var player = STATE.players[0];
   recordLearningAttempt(STATE.currentQuestion, false);
 
@@ -2281,6 +2295,8 @@ function soloCheckWin() {
   for (var i = 0; i < players.length; i++) {
     if (players[i].hp <= 0) {
       STATE.battleActive = false;
+      clearTimeout(STATE.soloFreezeTimeout);
+      STATE.soloFreezeTimeout = null;
       Sound.stopMusic();
       stopTimerDisplay();
       var winnerIdx = 1 - i;
@@ -2329,6 +2345,11 @@ function soloActivateCard(cardIdx) {
   var player = STATE.players[0];
   var card = player.cards[cardIdx];
   if (!card || card.used) return;
+  if (card.id === 'healPotion' && player.hp >= player.maxHP) {
+    document.getElementById('feedback-msg').textContent = 'Heal Potion cannot be used at full HP.';
+    document.getElementById('feedback-msg').className = 'feedback-msg wrong';
+    return;
+  }
   STATE.soloCardUsage[card.id] = (STATE.soloCardUsage[card.id] || 0) + 1;
 
   showPowerEffect(card.id, 0);
@@ -2337,11 +2358,40 @@ function soloActivateCard(cardIdx) {
   switch (card.id) {
     case 'doubleStrike': player.activeEffects.doubleStrike = true; addLog('card', 'Double Strike active!'); break;
     case 'shield': player.activeEffects.shield = true; addLog('card', 'Shield active!'); break;
-    case 'timeFreeze': stopTimerDisplay(); clearInterval(STATE.timerInterval); document.getElementById('timer-text').textContent = 'FROZEN'; addLog('card', 'Time Freeze!'); break;
+    case 'timeFreeze':
+      var frozenTimeLeft = Math.max(0.1, Number(STATE.timeLeft) || Number(STATE.settings.timer));
+      var frozenQuestionVersion = STATE.soloQuestionVersion;
+      stopTimerDisplay();
+      document.getElementById('timer-text').textContent = 'FROZEN 3s';
+      addLog('card', 'Timer frozen for 3 seconds!');
+      clearTimeout(STATE.soloFreezeTimeout);
+      STATE.soloFreezeTimeout = setTimeout(function () {
+        STATE.soloFreezeTimeout = null;
+        if (!STATE.battleActive || !STATE.currentQuestion || STATE.soloQuestionVersion !== frozenQuestionVersion) return;
+        startTimerDisplay(frozenTimeLeft);
+      }, 3000);
+      break;
     case 'healPotion': var heal = Math.min(20, player.maxHP - player.hp); player.hp += heal; addLog('card', 'Healed +' + heal + ' HP!'); break;
     case 'revealHint': var hint = STATE.currentQuestion.answer % 2 === 0 ? 'EVEN' : 'ODD'; document.getElementById('hint-display').textContent = 'Hint: Answer is ' + hint; addLog('card', 'Revealed hint: ' + hint); break;
-    case 'skipQuestion': stopTimerDisplay(); addLog('card', 'Skipped question!'); setTimeout(function () { if (STATE.battleActive) { soloNextTurn(); } }, 500); break;
-    case 'stealHP': var opp = STATE.players[1]; var steal = Math.min(15, opp.hp); opp.hp -= steal; player.hp = Math.min(player.maxHP, player.hp + steal); addLog('card', 'Stole ' + steal + ' HP!'); break;
+    case 'skipQuestion':
+      clearTimeout(STATE.soloFreezeTimeout);
+      STATE.soloFreezeTimeout = null;
+      stopTimerDisplay();
+      STATE.currentQuestion = null;
+      STATE.soloQuestionVersion++;
+      document.getElementById('answer-input').disabled = true;
+      document.getElementById('btn-attack').disabled = true;
+      addLog('card', 'Skipped question with no penalty!');
+      setTimeout(function () { if (STATE.battleActive) { soloNextTurn(); } }, 500);
+      break;
+    case 'stealHP':
+      var opp = STATE.players[1];
+      var steal = Math.min(15, opp.hp);
+      var hpBeforeSteal = player.hp;
+      opp.hp -= steal;
+      player.hp = Math.min(player.maxHP, player.hp + steal);
+      addLog('card', 'Drained ' + steal + ' HP and restored ' + (player.hp - hpBeforeSteal) + ' HP!');
+      break;
     case 'secondChance': player.activeEffects.secondChance = true; addLog('card', 'Second Chance ready!'); break;
     case 'streakBoost': player.streak += 3; addLog('card', 'Streak boosted to ' + player.streak + '!'); break;
     case 'mirrorShield': player.activeEffects.mirrorShield = true; addLog('card', 'Mirror Shield active!'); break;
@@ -2350,6 +2400,7 @@ function soloActivateCard(cardIdx) {
   card.used = true;
   updateAllUI();
   updateCardInteractivity();
+  if (card.id === 'stealHP') soloCheckWin();
 }
 
 function updateModeDesc(mode) {
@@ -2792,7 +2843,12 @@ function handleMessage(msg) {
       document.getElementById('answer-input').value = '';
       document.getElementById('feedback-msg').textContent = '';
       document.getElementById('feedback-msg').className = 'feedback-msg';
+      document.getElementById('hint-display').textContent = '';
+      document.getElementById('answer-input').disabled = STATE.currentPlayer !== STATE.you;
+      document.getElementById('btn-attack').disabled = STATE.currentPlayer !== STATE.you;
+      if (STATE.currentPlayer === STATE.you) document.getElementById('answer-input').focus();
       startTimerDisplay(msg.timer);
+      updateCardInteractivity();
       break;
 
     case 'answerResult':
@@ -2887,25 +2943,51 @@ function handleMessage(msg) {
 
     case 'stateSync':
       STATE.players = msg.players;
+      if (STATE.players[STATE.you] && Array.isArray(STATE.players[STATE.you].cards)) {
+        STATE.yourCards = STATE.players[STATE.you].cards;
+      }
       updateAllUI();
       break;
 
     case 'cardActivated':
       var cardPlayerName = STATE.players[msg.playerIdx].name;
       var isMyCard = msg.playerIdx === STATE.you;
+      if (isMyCard && STATE.yourCards[msg.cardIdx]) STATE.yourCards[msg.cardIdx].used = true;
       // Visual effect
       showPowerEffect(msg.cardId, msg.playerIdx);
       // Feedback
       var cardMsg = (isMyCard ? 'You' : cardPlayerName) + ' activated ' + msg.cardName + '!';
       if (msg.healAmt) cardMsg += ' +' + msg.healAmt + ' HP';
-      if (msg.steal) cardMsg += ' Stole ' + msg.steal + ' HP!';
+      if (msg.steal) cardMsg += ' Drained ' + msg.steal + ' HP and restored ' + (msg.healed || 0) + ' HP!';
       if (msg.hint) { document.getElementById('hint-display').textContent = 'Hint: Answer is ' + msg.hint; }
       if (msg.newStreak) cardMsg += ' Streak: ' + msg.newStreak;
-      if (msg.timerFrozen) { stopTimerDisplay(); document.getElementById('timer-text').textContent = 'FROZEN'; }
+      if (msg.timerFrozen) { stopTimerDisplay(); document.getElementById('timer-text').textContent = 'FROZEN ' + (msg.freezeSeconds || 3) + 's'; }
+      if (msg.skipQuestion) {
+        stopTimerDisplay();
+        STATE.currentQuestion = null;
+        document.getElementById('answer-input').disabled = true;
+        document.getElementById('btn-attack').disabled = true;
+        cardMsg += ' Preparing a new question...';
+      }
       document.getElementById('feedback-msg').textContent = cardMsg;
       document.getElementById('feedback-msg').className = 'feedback-msg card';
       Sound.cardActivate();
       addLog('card', cardPlayerName + ' activated ' + msg.cardName);
+      renderCards();
+      break;
+
+    case 'cardRejected':
+      document.getElementById('feedback-msg').textContent = msg.error || 'That Magic Card cannot be used now.';
+      document.getElementById('feedback-msg').className = 'feedback-msg wrong';
+      Sound.wrong();
+      updateCardInteractivity();
+      break;
+
+    case 'timerResumed':
+      if (!STATE.battleActive || !STATE.currentQuestion) return;
+      document.getElementById('feedback-msg').textContent = 'Time Freeze ended. Timer resumed!';
+      document.getElementById('feedback-msg').className = 'feedback-msg info';
+      startTimerDisplay(msg.timeLeft);
       break;
 
     case 'cardEffect':
@@ -3354,7 +3436,9 @@ function updateCardInteractivity() {
     var isMyTurn = STATE.currentPlayer === STATE.you;
     for (var j = 0; j < cards.length; j++) {
       if (cards[j].classList.contains('used')) continue;
-      if (i === STATE.you && isMyTurn && STATE.battleActive) cards[j].classList.remove('disabled');
+      var cardData = i === STATE.you ? STATE.yourCards[j] : null;
+      var unusableHeal = cardData && cardData.id === 'healPotion' && STATE.players[i] && STATE.players[i].hp >= STATE.players[i].maxHP;
+      if (i === STATE.you && isMyTurn && STATE.battleActive && !unusableHeal) cards[j].classList.remove('disabled');
       else cards[j].classList.add('disabled');
     }
   }
@@ -3366,6 +3450,11 @@ function activateCard(playerIdx, cardIdx) {
   if (!STATE.battleActive) return;
   var card = STATE.yourCards[cardIdx];
   if (!card || card.used) return;
+  if (card.id === 'healPotion' && STATE.players[STATE.you] && STATE.players[STATE.you].hp >= STATE.players[STATE.you].maxHP) {
+    document.getElementById('feedback-msg').textContent = 'Heal Potion cannot be used at full HP.';
+    document.getElementById('feedback-msg').className = 'feedback-msg wrong';
+    return;
+  }
   if (STATE.gameMode === 'solo') {
     soloActivateCard(cardIdx);
   } else {
