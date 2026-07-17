@@ -40,7 +40,7 @@ function getTransporter() {
   if (transporter) return transporter;
   const config = smtpConfiguration();
   if (!config.configured) {
-    const error = new Error('Penghantaran emel reset belum dikonfigurasi.');
+    const error = new Error('Reset email delivery has not been configured.');
     error.code = 'EMAIL_NOT_CONFIGURED';
     throw error;
   }
@@ -85,20 +85,20 @@ async function sendPasswordResetCode(email, code) {
   await mailer.sendMail({
     from: config.from,
     to: email,
-    subject: 'Kod Reset Password — Sifir Hero Arena',
+    subject: 'Password Reset Code — Times Table Hero Arena',
     text: [
-      'Kod reset password anda ialah: ' + code,
+      'Your password reset code is: ' + code,
       '',
-      'Kod ini sah selama 15 minit dan hanya boleh digunakan sekali.',
-      'Jika anda tidak meminta reset ini, abaikan emel ini.'
+      'This code is valid for 15 minutes and can only be used once.',
+      'If you did not request this reset, ignore this email.'
     ].join('\n'),
     html: [
       '<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;background:#11111f;color:#f7f7ff;border-radius:14px">',
-      '<h2 style="color:#00f0ff">Sifir Hero Arena</h2>',
-      '<p>Kod reset password anda:</p>',
+      '<h2 style="color:#00f0ff">Times Table Hero Arena</h2>',
+      '<p>Your password reset code:</p>',
       '<div style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#ffe600;padding:16px 0">' + code + '</div>',
-      '<p>Kod ini sah selama <strong>15 minit</strong> dan hanya boleh digunakan sekali.</p>',
-      '<p style="color:#9a9ab4">Jika anda tidak meminta reset ini, abaikan emel ini.</p>',
+      '<p>This code is valid for <strong>15 minutes</strong> and can only be used once.</p>',
+      '<p style="color:#9a9ab4">If you did not request this reset, ignore this email.</p>',
       '</div>'
     ].join('')
   });

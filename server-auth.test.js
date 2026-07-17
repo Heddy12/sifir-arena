@@ -99,7 +99,7 @@ async function run() {
       body: JSON.stringify({ profileId: accountBody.account.accountId, player: 'RoomHero', avatarKey: 'hero-fire', bio: 'Attempted overwrite' })
     });
     assert.strictEqual(response.status, 403);
-    assert.strictEqual((await response.json()).error, 'Anda hanya boleh mengedit profil sendiri.');
+    assert.strictEqual((await response.json()).error, 'You can only edit your own profile.');
     response = await fetch(base + '/api/profile?player=RoomHero', { headers: { Cookie: cookie } });
     profileBody = await response.json();
     assert.strictEqual(profileBody.profile.player.avatarKey, 'knight-red');
@@ -129,7 +129,7 @@ async function run() {
       body: JSON.stringify({ email: 'g-97558615@moe-dl.edu.my' })
     });
     assert.strictEqual(response.status, 200);
-    assert.strictEqual((await response.json()).message, 'Jika emel itu didaftarkan, kod reset telah dihantar.');
+    assert.strictEqual((await response.json()).message, 'If that email is registered, a reset code has been sent.');
     const resetMessage = emailService.takeLastTestMessage();
     assert.strictEqual(resetMessage.email, 'g-97558615@moe-dl.edu.my');
     assert.match(resetMessage.code, /^\d{6}$/);

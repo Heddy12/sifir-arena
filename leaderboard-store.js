@@ -330,10 +330,10 @@ async function registerAccount(input) {
   const email = normalizeEmail(input && input.email);
   const playerName = normalizePlayerName(input && input.playerName);
   const password = normalizePassword(input && input.password);
-  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
-  if (!playerName) throw authError('INVALID_PLAYER_NAME', 'Player ID mesti 3-20 aksara: huruf, nombor atau _.');
-  if (botCatalog.isReservedBotName(playerName)) throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
-  if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
+  if (!email) throw authError('INVALID_EMAIL', 'Enter a valid email address.');
+  if (!playerName) throw authError('INVALID_PLAYER_NAME', 'Player ID must contain 3-20 letters, numbers or _.');
+  if (botCatalog.isReservedBotName(playerName)) throw authError('PLAYER_NAME_TAKEN', 'That Player ID is already in use.');
+  if (!password) throw authError('INVALID_PASSWORD', 'Password must contain 8-128 characters.');
 
   await ensureSchema();
   const salt = crypto.randomBytes(16).toString('hex');
@@ -349,10 +349,10 @@ async function registerAccount(input) {
       [email, playerName.toLowerCase()]
     );
     if (existing.rows.some(function (row) { return row.email === email; })) {
-      throw authError('EMAIL_TAKEN', 'Alamat emel itu sudah didaftarkan.');
+      throw authError('EMAIL_TAKEN', 'That email address is already registered.');
     }
     if (existing.rows.some(function (row) { return row.player_name_key === playerName.toLowerCase(); })) {
-      throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
+      throw authError('PLAYER_NAME_TAKEN', 'That Player ID is already in use.');
     }
     const result = await client.query(
       `INSERT INTO player_accounts
@@ -369,8 +369,8 @@ async function registerAccount(input) {
     await client.query('ROLLBACK').catch(function () {});
     if (error.code === '23505') {
       const detail = String(error.constraint || error.detail || '').toLowerCase();
-      if (detail.includes('player_name')) throw authError('PLAYER_NAME_TAKEN', 'Player ID itu sudah digunakan.');
-      throw authError('EMAIL_TAKEN', 'Alamat emel itu sudah didaftarkan.');
+      if (detail.includes('player_name')) throw authError('PLAYER_NAME_TAKEN', 'That Player ID is already in use.');
+      throw authError('EMAIL_TAKEN', 'That email address is already registered.');
     }
     if (error.code && (error.code.startsWith('INVALID_') || error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN')) throw error;
     throw unavailableError(error.message);
@@ -382,7 +382,7 @@ async function registerAccount(input) {
 async function loginAccount(input) {
   const email = normalizeEmail(input && input.email);
   const password = normalizePassword(input && input.password);
-  if (!email || !password) throw authError('INVALID_CREDENTIALS', 'Emel atau kata laluan tidak betul.');
+  if (!email || !password) throw authError('INVALID_CREDENTIALS', 'Incorrect email or password.');
 
   await ensureSchema();
   const result = await getPool().query(
@@ -395,7 +395,7 @@ async function loginAccount(input) {
   const expected = row ? row.password_hash : '0'.repeat(128);
   const actual = await hashPassword(password, salt);
   const matches = crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
-  if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Emel atau kata laluan tidak betul.');
+  if (!row || !matches) throw authError('INVALID_CREDENTIALS', 'Incorrect email or password.');
 
   const db = getPool();
   const client = await db.connect();
@@ -415,7 +415,7 @@ async function loginAccount(input) {
 
 async function createPasswordReset(input) {
   const email = normalizeEmail(input && input.email);
-  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
+  if (!email) throw authError('INVALID_EMAIL', 'Enter a valid email address.');
   await ensureSchema();
   const db = getPool();
   await db.query('DELETE FROM password_reset_tokens WHERE expires_at <= NOW()');
@@ -453,9 +453,9 @@ async function resetPassword(input) {
   const email = normalizeEmail(input && input.email);
   const code = typeof (input && input.code) === 'string' ? input.code.trim() : '';
   const password = normalizePassword(input && (input.newPassword || input.password));
-  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
-  if (!/^\d{6}$/.test(code)) throw authError('INVALID_RESET_CODE', 'Kod reset mesti mengandungi 6 digit.');
-  if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
+  if (!email) throw authError('INVALID_EMAIL', 'Enter a valid email address.');
+  if (!/^\d{6}$/.test(code)) throw authError('INVALID_RESET_CODE', 'The reset code must contain 6 digits.');
+  if (!password) throw authError('INVALID_PASSWORD', 'Password must contain 8-128 characters.');
 
   await ensureSchema();
   const client = await getPool().connect();
@@ -482,7 +482,7 @@ async function resetPassword(input) {
         }
       }
       await client.query('COMMIT');
-      throw authError('INVALID_RESET_CODE', 'Kod reset tidak sah atau sudah tamat tempoh.');
+      throw authError('INVALID_RESET_CODE', 'The reset code is invalid or has expired.');
     }
 
     const salt = crypto.randomBytes(16).toString('hex');
@@ -1212,20 +1212,20 @@ async function completeBotRotation(profileId, mode, botProfileId) {
 
 async function updateProfile(profileId, input) {
   const id = normalizeProfileId(profileId);
-  if (!id) throw authError('PROFILE_NOT_FOUND', 'Profile tidak ditemui.');
+  if (!id) throw authError('PROFILE_NOT_FOUND', 'Profile not found.');
   const avatarKey = normalizeAvatar(input && input.avatarKey);
   const bio = normalizeBio(input && input.bio);
-  if (bio === null) throw authError('INVALID_BIO', 'Bio tidak boleh mengandungi URL atau alamat emel.');
+  if (bio === null) throw authError('INVALID_BIO', 'Bio cannot contain URLs or email addresses.');
   await ensureSchema();
   const db = getPool();
   const owner = await db.query('SELECT 1 FROM player_accounts WHERE account_id = $1', [id]);
-  if (!owner.rows[0]) throw authError('PROFILE_NOT_EDITABLE', 'Hanya pemilik akaun boleh mengedit profile ini.');
+  if (!owner.rows[0]) throw authError('PROFILE_NOT_EDITABLE', 'Only the account owner can edit this profile.');
   const result = await db.query(
     `UPDATE player_profile_details SET avatar_key = $2, bio = $3, updated_at = NOW()
      WHERE profile_id = $1 RETURNING avatar_key, bio`,
     [id, avatarKey, bio]
   );
-  if (!result.rows[0]) throw authError('PROFILE_NOT_FOUND', 'Profile tidak ditemui.');
+  if (!result.rows[0]) throw authError('PROFILE_NOT_FOUND', 'Profile not found.');
   return { avatarKey: result.rows[0].avatar_key, bio: result.rows[0].bio };
 }
 

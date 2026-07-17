@@ -1527,7 +1527,7 @@ function startNextQuickMatch(playerId, requestedMode) {
   const room = player.roomCode ? rooms[player.roomCode] : null;
   if (room) {
     if (room.matchType !== 'quick' || room.battleActive || room.countdownPending || !room.leaderboardRecorded) {
-      sendToPlayer(playerId, { type: 'quickMatchError', error: 'Pertarungan semasa belum selesai.' });
+      sendToPlayer(playerId, { type: 'quickMatchError', error: 'The current battle is not finished yet.' });
       return;
     }
     closeCompletedQuickRoom(room);
@@ -1720,23 +1720,23 @@ function authErrorStatus(error) {
 async function handleProfileRequest(req, res) {
   try {
     const account = await leaderboard.getAccountBySession(sessionToken(req));
-    if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+    if (!account) { sendJson(res, 401, { error: 'Login required.' }); return; }
     if (req.method === 'GET') {
       const requestUrl = new URL(req.url, 'http://localhost');
       const playerName = requestUrl.searchParams.get('player') || account.playerName;
       const profile = await leaderboard.getPlayerProfile(playerName, account.accountId);
-      if (!profile) { sendJson(res, 404, { error: 'Profile tidak ditemui.' }); return; }
+      if (!profile) { sendJson(res, 404, { error: 'Profile not found.' }); return; }
       sendJson(res, 200, { profile: profile });
       return;
     }
     if (req.method === 'PATCH' || req.method === 'POST') {
-      if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
+      if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Request not allowed.' }); return; }
       const body = await readJsonBody(req, 4 * 1024);
       const requestedProfileId = body && body.profileId ? leaderboard.normalizeProfileId(body.profileId) : null;
       const requestedPlayerName = body && typeof body.player === 'string' ? body.player.trim() : '';
       if ((body && body.profileId && requestedProfileId !== account.accountId) ||
           (requestedPlayerName && requestedPlayerName.toLowerCase() !== account.playerName.toLowerCase())) {
-        sendJson(res, 403, { error: 'Anda hanya boleh mengedit profil sendiri.' });
+        sendJson(res, 403, { error: 'You can only edit your own profile.' });
         return;
       }
       const updated = await leaderboard.updateProfile(account.accountId, body);
@@ -1746,7 +1746,7 @@ async function handleProfileRequest(req, res) {
     sendJson(res, 405, { error: 'Method not allowed' });
   } catch (error) {
     const status = authErrorStatus(error);
-    sendJson(res, status, { error: status >= 500 ? 'Profile tidak tersedia buat sementara.' : error.message });
+    sendJson(res, status, { error: status >= 500 ? 'Profile is temporarily unavailable.' : error.message });
   }
 }
 
@@ -1754,14 +1754,14 @@ async function handleRankedLadderRequest(req, res) {
   if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
   try {
     const account = await leaderboard.getAccountBySession(sessionToken(req));
-    if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+    if (!account) { sendJson(res, 401, { error: 'Login required.' }); return; }
     const requestUrl = new URL(req.url, 'http://localhost');
     const mode = requestUrl.searchParams.get('mode') || 'multiplayer';
     const limit = Math.max(1, Math.min(Number(requestUrl.searchParams.get('limit')) || 10, 50));
     const ladder = await leaderboard.getRankedLadder(mode, limit);
     sendJson(res, 200, Object.assign({ mode: mode }, ladder));
   } catch (error) {
-    sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 400, { error: error.message || 'Ranked ladder tidak tersedia.' });
+    sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 400, { error: error.message || 'Ranked ladder is unavailable.' });
   }
 }
 
@@ -1770,16 +1770,16 @@ async function handleAuthRequest(req, res, urlPath) {
     if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
     try {
       const account = await leaderboard.getAccountBySession(sessionToken(req));
-      if (!account) { sendJson(res, 401, { error: 'Login diperlukan.' }); return; }
+      if (!account) { sendJson(res, 401, { error: 'Login required.' }); return; }
       sendJson(res, 200, { account: account });
     } catch (error) {
-      sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 500, { error: 'Sistem akaun tidak tersedia buat sementara.' });
+      sendJson(res, error.code === 'LEADERBOARD_UNAVAILABLE' ? 503 : 500, { error: 'The account system is temporarily unavailable.' });
     }
     return;
   }
 
   if (req.method !== 'POST') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
-  if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Permintaan tidak dibenarkan.' }); return; }
+  if (!requestHasValidOrigin(req)) { sendJson(res, 403, { error: 'Request not allowed.' }); return; }
 
   if (urlPath === '/api/logout') {
     try { await leaderboard.logoutSession(sessionToken(req)); } catch (error) {}
@@ -1792,12 +1792,12 @@ async function handleAuthRequest(req, res, urlPath) {
     const body = await readJsonBody(req, 10 * 1024);
     if (!consumeAuthAttempt(req, body.email)) {
       res.setHeader('Retry-After', String(Math.ceil(AUTH_WINDOW_MS / 1000)));
-      sendJson(res, 429, { error: 'Terlalu banyak cubaan. Cuba lagi dalam 15 minit.' });
+      sendJson(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
       return;
     }
     if (urlPath === '/api/forgot-password') {
       if (!emailService.isConfigured()) {
-        sendJson(res, 503, { error: 'Reset melalui emel belum tersedia. Hubungi pentadbir permainan.' });
+        sendJson(res, 503, { error: 'Email password reset is not available yet. Contact the game administrator.' });
         return;
       }
       const reset = await leaderboard.createPasswordReset(body);
@@ -1806,18 +1806,18 @@ async function handleAuthRequest(req, res, urlPath) {
           await emailService.sendPasswordResetCode(reset.email, reset.code);
         } catch (emailError) {
           await leaderboard.invalidatePasswordReset(reset.email).catch(function () {});
-          const wrapped = new Error('Emel reset tidak dapat dihantar. Cuba lagi kemudian.');
+          const wrapped = new Error('The reset email could not be sent. Please try again later.');
           wrapped.code = 'EMAIL_SEND_FAILED';
           throw wrapped;
         }
       }
-      sendJson(res, 200, { message: 'Jika emel itu didaftarkan, kod reset telah dihantar.' });
+      sendJson(res, 200, { message: 'If that email is registered, a reset code has been sent.' });
       return;
     }
     if (urlPath === '/api/reset-password') {
       await leaderboard.resetPassword(body);
       res.setHeader('Set-Cookie', clearSessionCookies(req));
-      sendJson(res, 200, { message: 'Password berjaya ditukar. Sila login menggunakan password baharu.' });
+      sendJson(res, 200, { message: 'Password changed successfully. Please log in using your new password.' });
       return;
     }
     const result = urlPath === '/api/register'
@@ -1827,7 +1827,7 @@ async function handleAuthRequest(req, res, urlPath) {
     sendJson(res, urlPath === '/api/register' ? 201 : 200, { account: result.account });
   } catch (error) {
     const status = authErrorStatus(error);
-    sendJson(res, status, { error: status === 500 ? 'Tidak dapat memproses permintaan.' : error.message });
+    sendJson(res, status, { error: status === 500 ? 'Unable to process the request.' : error.message });
   }
 }
 
@@ -2063,7 +2063,7 @@ wss.on('connection', async function connection(ws, req) {
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
         if (room && room.matchType === 'quick') {
-          sendToPlayer(playerId, { type: 'quickMatchError', error: 'Gunakan Next Opponent untuk meneruskan rotasi.' });
+          sendToPlayer(playerId, { type: 'quickMatchError', error: 'Use Next Opponent to continue the rotation.' });
           break;
         }
         if (room && room.players.length === 2 && !room.battleActive && !room.countdownPending) {
