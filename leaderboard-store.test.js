@@ -45,6 +45,26 @@ async function run() {
   );
   assert.strictEqual(await store.logoutSession(loggedIn.token), true);
   assert.strictEqual(await store.getAccountBySession(loggedIn.token), null);
+  const passwordReset = await store.createPasswordReset({ email: 'g-97558615@moe-dl.edu.my' });
+  assert.match(passwordReset.code, /^\d{6}$/);
+  await assert.rejects(
+    store.resetPassword({ email: 'g-97558615@moe-dl.edu.my', code: '000000', newPassword: 'new-secure-pass-123' }),
+    function (error) { return error.code === 'INVALID_RESET_CODE'; }
+  );
+  assert.strictEqual(await store.resetPassword({
+    email: 'g-97558615@moe-dl.edu.my',
+    code: passwordReset.code,
+    newPassword: 'new-secure-pass-123'
+  }), true);
+  assert.strictEqual(await store.getAccountBySession(registered.token), null);
+  await assert.rejects(
+    store.loginAccount({ email: 'g-97558615@moe-dl.edu.my', password: 'secure-pass-123' }),
+    function (error) { return error.code === 'INVALID_CREDENTIALS'; }
+  );
+  const resetLogin = await store.loginAccount({ email: 'g-97558615@moe-dl.edu.my', password: 'new-secure-pass-123' });
+  assert.strictEqual(resetLogin.account.accountId, registered.account.accountId);
+  assert.strictEqual(await store.logoutSession(resetLogin.token), true);
+  assert.strictEqual(await store.createPasswordReset({ email: 'unknown@example.com' }), null);
   assert.strictEqual(store.normalizeEmail('teacher@example.com'), 'teacher@example.com');
   assert.strictEqual(store.normalizeEmail('not-an-email'), null);
   assert.strictEqual(store.normalizePlayerName('bad name'), null);

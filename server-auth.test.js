@@ -42,6 +42,7 @@ async function run() {
   delete require.cache[require.resolve('./leaderboard-store')];
   delete require.cache[require.resolve('./server')];
   const app = require('./server');
+  const emailService = require('./email-service');
   await new Promise(function (resolve) { app.server.listen(0, '127.0.0.1', resolve); });
   const address = app.server.address();
   const base = 'http://127.0.0.1:' + address.port;
@@ -121,10 +122,31 @@ async function run() {
     const rejectedSocket = new WebSocket(base.replace('http:', 'ws:'));
     assert.strictEqual(await waitForClose(rejectedSocket), 4001);
 
-    response = await fetch(base + '/api/logout', { method: 'POST', headers: { Cookie: cookie, Origin: base } });
+    response = await fetch(base + '/api/forgot-password', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'g-97558615@moe-dl.edu.my' })
+    });
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual((await response.json()).message, 'Jika emel itu didaftarkan, kod reset telah dihantar.');
+    const resetMessage = emailService.takeLastTestMessage();
+    assert.strictEqual(resetMessage.email, 'g-97558615@moe-dl.edu.my');
+    assert.match(resetMessage.code, /^\d{6}$/);
+
+    response = await fetch(base + '/api/reset-password', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: resetMessage.email, code: resetMessage.code, newPassword: 'new-secure-pass-789' })
+    });
     assert.strictEqual(response.status, 200);
     response = await fetch(base + '/api/me', { headers: { Cookie: cookie } });
     assert.strictEqual(response.status, 401);
+    response = await fetch(base + '/api/login', {
+      method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: resetMessage.email, password: 'new-secure-pass-789' })
+    });
+    assert.strictEqual(response.status, 200);
+    const resetCookie = response.headers.get('set-cookie').split(';')[0];
+    response = await fetch(base + '/api/logout', { method: 'POST', headers: { Cookie: resetCookie, Origin: base } });
+    assert.strictEqual(response.status, 200);
 
     console.log('server auth and room regression tests passed');
   } finally {

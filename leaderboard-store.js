@@ -13,6 +13,8 @@ let pool = null;
 let schemaReady = false;
 let lastError = null;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_SECRET = process.env.PASSWORD_RESET_SECRET || crypto.randomBytes(32).toString('hex');
 const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const SEASON_MS = 56 * 24 * 60 * 60 * 1000;
 const AVATAR_KEYS = ['hero-blue', 'hero-fire', 'hero-shadow', 'hero-gold', 'mage-cyan', 'knight-red', 'star-green', 'crown-purple'];
@@ -109,6 +111,10 @@ function hashSessionToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function hashPasswordResetCode(accountId, code) {
+  return crypto.createHmac('sha256', PASSWORD_RESET_SECRET).update(accountId + ':' + code).digest('hex');
+}
+
 function getPool() {
   if (!connectionString) throw unavailableError('DATABASE_URL is not configured');
   if (!pool) {
@@ -176,6 +182,16 @@ async function ensureSchema() {
 
       CREATE INDEX IF NOT EXISTS auth_sessions_account_idx ON auth_sessions(account_id);
       CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
+
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        account_id VARCHAR(80) PRIMARY KEY REFERENCES player_accounts(account_id) ON DELETE CASCADE,
+        code_hash VARCHAR(64) NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS password_reset_expiry_idx ON password_reset_tokens(expires_at);
 
       CREATE TABLE IF NOT EXISTS player_profile_details (
         profile_id VARCHAR(80) PRIMARY KEY REFERENCES leaderboard_profiles(profile_id) ON DELETE CASCADE,
@@ -387,6 +403,99 @@ async function loginAccount(input) {
   } catch (error) {
     await client.query('ROLLBACK').catch(function () {});
     throw unavailableError(error.message);
+  } finally {
+    client.release();
+  }
+}
+
+async function createPasswordReset(input) {
+  const email = normalizeEmail(input && input.email);
+  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
+  await ensureSchema();
+  const db = getPool();
+  await db.query('DELETE FROM password_reset_tokens WHERE expires_at <= NOW()');
+  const accountResult = await db.query(
+    'SELECT account_id, email FROM player_accounts WHERE email = $1',
+    [email]
+  );
+  const account = accountResult.rows[0];
+  if (!account) return null;
+  const code = String(crypto.randomInt(100000, 1000000));
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+  await db.query(
+    `INSERT INTO password_reset_tokens (account_id, code_hash, attempts, expires_at, created_at)
+     VALUES ($1, $2, 0, $3, NOW())
+     ON CONFLICT (account_id) DO UPDATE SET
+       code_hash = EXCLUDED.code_hash, attempts = 0, expires_at = EXCLUDED.expires_at, created_at = NOW()`,
+    [account.account_id, hashPasswordResetCode(account.account_id, code), expiresAt]
+  );
+  return { email: account.email, code: code, expiresAt: expiresAt };
+}
+
+async function invalidatePasswordReset(emailValue) {
+  const email = normalizeEmail(emailValue);
+  if (!email) return false;
+  await ensureSchema();
+  await getPool().query(
+    `DELETE FROM password_reset_tokens
+     WHERE account_id IN (SELECT account_id FROM player_accounts WHERE email = $1)`,
+    [email]
+  );
+  return true;
+}
+
+async function resetPassword(input) {
+  const email = normalizeEmail(input && input.email);
+  const code = typeof (input && input.code) === 'string' ? input.code.trim() : '';
+  const password = normalizePassword(input && (input.newPassword || input.password));
+  if (!email) throw authError('INVALID_EMAIL', 'Gunakan alamat emel yang sah.');
+  if (!/^\d{6}$/.test(code)) throw authError('INVALID_RESET_CODE', 'Kod reset mesti mengandungi 6 digit.');
+  if (!password) throw authError('INVALID_PASSWORD', 'Kata laluan mesti 8-128 aksara.');
+
+  await ensureSchema();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `SELECT a.account_id, r.code_hash, r.attempts, r.expires_at
+       FROM player_accounts a
+       LEFT JOIN password_reset_tokens r ON r.account_id = a.account_id
+       WHERE a.email = $1 FOR UPDATE`,
+      [email]
+    );
+    const row = result.rows[0];
+    const actualHash = row ? hashPasswordResetCode(row.account_id, code) : '0'.repeat(64);
+    const expectedHash = row && row.code_hash ? row.code_hash : '1'.repeat(64);
+    const codeMatches = crypto.timingSafeEqual(Buffer.from(actualHash, 'hex'), Buffer.from(expectedHash, 'hex'));
+    const expired = !row || !row.expires_at || new Date(row.expires_at).getTime() <= Date.now();
+    if (!row || !row.code_hash || expired || Number(row.attempts) >= 5 || !codeMatches) {
+      if (row && row.code_hash) {
+        if (expired || Number(row.attempts) >= 4) {
+          await client.query('DELETE FROM password_reset_tokens WHERE account_id = $1', [row.account_id]);
+        } else {
+          await client.query('UPDATE password_reset_tokens SET attempts = attempts + 1 WHERE account_id = $1', [row.account_id]);
+        }
+      }
+      await client.query('COMMIT');
+      throw authError('INVALID_RESET_CODE', 'Kod reset tidak sah atau sudah tamat tempoh.');
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = await hashPassword(password, salt);
+    await client.query(
+      'UPDATE player_accounts SET password_salt = $2, password_hash = $3, updated_at = NOW() WHERE account_id = $1',
+      [row.account_id, salt, passwordHash]
+    );
+    await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [row.account_id]);
+    await client.query('DELETE FROM password_reset_tokens WHERE account_id = $1', [row.account_id]);
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    if (!String(error.code || '').startsWith('INVALID_')) {
+      await client.query('ROLLBACK').catch(function () {});
+      throw unavailableError(error.message);
+    }
+    throw error;
   } finally {
     client.release();
   }
@@ -1431,6 +1540,9 @@ module.exports = {
   normalizePlayerName,
   registerAccount,
   loginAccount,
+  createPasswordReset,
+  invalidatePasswordReset,
+  resetPassword,
   getAccountBySession,
   logoutSession,
   status

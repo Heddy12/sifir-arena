@@ -18,6 +18,7 @@ const path = require('path');
 const WebSocket = require('ws');
 const leaderboard = require('./leaderboard-store');
 const botCatalog = require('./bot-catalog');
+const emailService = require('./email-service');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_COOKIE = 'sifir_session';
@@ -1695,6 +1696,7 @@ function authErrorStatus(error) {
   if (error.code === 'INVALID_CREDENTIALS') return 401;
   if (error.code === 'EMAIL_TAKEN' || error.code === 'PLAYER_NAME_TAKEN') return 409;
   if (error.code === 'LEADERBOARD_UNAVAILABLE') return 503;
+  if (error.code === 'EMAIL_NOT_CONFIGURED' || error.code === 'EMAIL_SEND_FAILED') return 503;
   if (error.code === 'PROFILE_NOT_FOUND') return 404;
   if (error.code === 'PROFILE_NOT_EDITABLE') return 403;
   if (String(error.code || '').startsWith('INVALID_') || error.code === 'BODY_TOO_LARGE') return 400;
@@ -1779,6 +1781,31 @@ async function handleAuthRequest(req, res, urlPath) {
       sendJson(res, 429, { error: 'Terlalu banyak cubaan. Cuba lagi dalam 15 minit.' });
       return;
     }
+    if (urlPath === '/api/forgot-password') {
+      if (!emailService.isConfigured()) {
+        sendJson(res, 503, { error: 'Reset melalui emel belum tersedia. Hubungi pentadbir permainan.' });
+        return;
+      }
+      const reset = await leaderboard.createPasswordReset(body);
+      if (reset) {
+        try {
+          await emailService.sendPasswordResetCode(reset.email, reset.code);
+        } catch (emailError) {
+          await leaderboard.invalidatePasswordReset(reset.email).catch(function () {});
+          const wrapped = new Error('Emel reset tidak dapat dihantar. Cuba lagi kemudian.');
+          wrapped.code = 'EMAIL_SEND_FAILED';
+          throw wrapped;
+        }
+      }
+      sendJson(res, 200, { message: 'Jika emel itu didaftarkan, kod reset telah dihantar.' });
+      return;
+    }
+    if (urlPath === '/api/reset-password') {
+      await leaderboard.resetPassword(body);
+      res.setHeader('Set-Cookie', clearSessionCookies(req));
+      sendJson(res, 200, { message: 'Password berjaya ditukar. Sila login menggunakan password baharu.' });
+      return;
+    }
     const result = urlPath === '/api/register'
       ? await leaderboard.registerAccount(body)
       : await leaderboard.loginAccount(body);
@@ -1855,7 +1882,7 @@ const server = http.createServer(function (req, res) {
     handleRankedLadderRequest(req, res);
     return;
   }
-  if (['/api/register', '/api/login', '/api/logout', '/api/me'].includes(urlPath)) {
+  if (['/api/register', '/api/login', '/api/logout', '/api/me', '/api/forgot-password', '/api/reset-password'].includes(urlPath)) {
     handleAuthRequest(req, res, urlPath);
     return;
   }
