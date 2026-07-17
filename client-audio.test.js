@@ -167,6 +167,7 @@ function run() {
   assert.ok(loaded.html.includes("STATE.matchType === 'quick'"), 'Quick Match result should use the next-opponent flow');
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
   assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
+  assert.ok(loaded.html.includes("selectedMode === 'ffa' ? 6"), 'Multiplayer Create Room should always send a 6-second timer');
   console.log('client audio tests passed');
 }
 

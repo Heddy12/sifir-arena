@@ -117,6 +117,7 @@ async function run() {
     socket.send(JSON.stringify({ type: 'createRoom', settings: { timer: 20, sifir: 0, difficulty: 'random', gameMode: 'ffa' } }));
     const created = await createdPromise;
     assert.match(created.code, /^[A-Z0-9]{6}$/);
+    assert.strictEqual(created.settings.timer, 6, 'Multiplayer Create Room must always use a 6-second answer timer');
     socket.close();
 
     const rejectedSocket = new WebSocket(base.replace('http:', 'ws:'));

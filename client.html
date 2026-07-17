@@ -1307,7 +1307,7 @@ function getCurrentSettings(mode) {
   var selectedMode = mode || STATE.gameMode;
   var sprintDuration = parseInt(document.getElementById('setting-sprinttime').value);
   return {
-    timer: selectedMode === 'sprint' ? sprintDuration : parseInt(document.getElementById('setting-timer').value),
+    timer: selectedMode === 'sprint' ? sprintDuration : (selectedMode === 'ffa' ? 6 : parseInt(document.getElementById('setting-timer').value)),
     sifir: parseInt(document.getElementById('setting-sifir').value),
     difficulty: document.getElementById('setting-difficulty').value,
     gameMode: selectedMode,
@@ -1319,6 +1319,7 @@ function isRankedSettingsClient(settings, mode) {
   if (!settings) return false;
   if (Number(settings.sifir) !== 0 || settings.difficulty !== 'random') return false;
   if (mode === 'sprint') return Number(settings.timer) === 60 && Number(settings.sprintTime) === 60;
+  if (mode === 'ffa' || mode === 'multiplayer') return Number(settings.timer) === 6;
   return Number(settings.timer) === 20;
 }
 
@@ -2356,6 +2357,15 @@ function applyModeState(mode) {
   updateWarriorDisplay(mode);
   var isSolo = mode === 'solo';
   var supportsQuickMatch = mode === 'ffa' || mode === 'sprint';
+  var timerSelect = document.getElementById('setting-timer');
+  if (mode === 'ffa') {
+    if (timerSelect.value !== '6') timerSelect.dataset.nonMultiplayerValue = timerSelect.value;
+    timerSelect.value = '6';
+    timerSelect.disabled = true;
+  } else {
+    if (timerSelect.dataset.nonMultiplayerValue) timerSelect.value = timerSelect.dataset.nonMultiplayerValue;
+    timerSelect.disabled = false;
+  }
   document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
@@ -2390,9 +2400,10 @@ function applyModeState(mode) {
 
 function setModeControlsLocked(locked) {
   document.querySelectorAll('.mode-btn').forEach(function (button) { button.disabled = !!locked; });
-  ['setting-timer', 'setting-sifir', 'setting-difficulty', 'setting-sprinttime'].forEach(function (id) {
+  ['setting-sifir', 'setting-difficulty', 'setting-sprinttime'].forEach(function (id) {
     document.getElementById(id).disabled = !!locked;
   });
+  document.getElementById('setting-timer').disabled = !!locked || STATE.gameMode === 'ffa';
 }
 
 function initModeToggle() {

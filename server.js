@@ -41,10 +41,11 @@ const WRONG_DAMAGE = 5;
 const TIMEOUT_DAMAGE = 8;
 const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
+const MULTIPLAYER_TURN_SECONDS = 6;
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
 const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONNECT_GRACE_MS) || 30000);
-const QUICK_MATCH_SETTINGS = Object.freeze({ timer: 6, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
+const QUICK_MATCH_SETTINGS = Object.freeze({ timer: MULTIPLAYER_TURN_SECONDS, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
 
 leaderboard.initialize().then(function (ready) {
   if (ready) {
@@ -198,13 +199,14 @@ function isRankedSettings(settings, mode) {
   if (mode === 'sprint') {
     return Number(source.timer) === SPRINT_DURATION && Number(source.sprintTime) === SPRINT_DURATION;
   }
+  if (mode === 'ffa' || mode === 'multiplayer') return Number(source.timer) === MULTIPLAYER_TURN_SECONDS;
   return Number(source.timer) === 20;
 }
 
 function isRankedRoom(room) {
   if (!room) return false;
   if (room.matchType === 'quick' && room.gameMode === 'ffa') {
-    return Number(room.settings.timer) === 6 && Number(room.settings.sifir) === 0 && room.settings.difficulty === 'random';
+    return Number(room.settings.timer) === MULTIPLAYER_TURN_SECONDS && Number(room.settings.sifir) === 0 && room.settings.difficulty === 'random';
   }
   return isRankedSettings(room.settings, room.gameMode);
 }
@@ -388,6 +390,7 @@ function submitSoloLeaderboardResult(playerId, message) {
 
 function createRoom(playerId, settings) {
   settings = normalizeSettings(settings);
+  if (settings.gameMode === 'ffa') settings.timer = MULTIPLAYER_TURN_SECONDS;
   const code = generateRoomCode();
   rooms[code] = {
     code: code,
@@ -1982,6 +1985,7 @@ wss.on('connection', async function connection(ws, req) {
       case 'createRoom': {
         cancelQuickMatch(playerId, false);
         const settings = normalizeSettings(message.settings);
+        if (settings.gameMode === 'ffa') settings.timer = MULTIPLAYER_TURN_SECONDS;
         const code = createRoom(playerId, settings);
         sendToPlayer(playerId, { type: 'roomCreated', code: code, gameMode: settings.gameMode, settings: settings });
         break;
