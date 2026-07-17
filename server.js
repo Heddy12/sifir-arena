@@ -43,9 +43,6 @@ const FAST_BONUS = 5;
 const SCORE_PER_CORRECT = 10;
 const TIME_FREEZE_SECONDS = 3;
 const MULTIPLAYER_TURN_SECONDS = 6;
-const STICKER_COOLDOWN_MS = Math.max(100, Number(process.env.STICKER_COOLDOWN_MS) || 5000);
-const BOT_STICKER_COOLDOWN_MS = Math.max(STICKER_COOLDOWN_MS, Number(process.env.BOT_STICKER_COOLDOWN_MS) || 10000);
-const STICKER_IDS = new Set(['happy', 'angry', 'funny', 'wow', 'nice', 'goodGame', 'oops', 'fire']);
 const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 5000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
 const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONNECT_GRACE_MS) || 30000);
@@ -593,8 +590,7 @@ function createBotOpponent(profile) {
     roomCode: null,
     playerIdx: 1,
     isBot: true,
-    bot: instance,
-    lastStickerAt: 0
+    bot: instance
   };
   return botId;
 }
@@ -964,45 +960,6 @@ function handleAnswer(room, playerId, answer) {
   }, TURN_DELAY);
 }
 
-function handleSticker(room, playerId, stickerId, now) {
-  const player = players[playerId];
-  if (!room || !player || !room.battleActive || (room.gameMode !== 'ffa' && room.gameMode !== 'sprint')) return false;
-  if (!room.players.includes(playerId) || !STICKER_IDS.has(stickerId)) return false;
-  const sentAt = Number(now) || Date.now();
-  const remainingMs = Math.max(0, STICKER_COOLDOWN_MS - (sentAt - (Number(player.lastStickerAt) || 0)));
-  if (remainingMs > 0) {
-    sendToPlayer(playerId, { type: 'stickerCooldown', remainingMs: remainingMs });
-    return false;
-  }
-  player.lastStickerAt = sentAt;
-  broadcast(room, { type: 'sticker', playerIdx: player.playerIdx, stickerId: stickerId });
-  return true;
-}
-
-function botStickerChoices(context) {
-  if (context === 'correct') return ['happy', 'nice', 'fire'];
-  if (context === 'wrong') return ['oops', 'funny', 'angry'];
-  if (context === 'timeout') return ['oops', 'angry'];
-  if (context === 'bigHit') return ['wow', 'angry'];
-  return ['happy', 'goodGame'];
-}
-
-function maybeSendBotSticker(room, playerIdx, context, randomValue, now) {
-  if (!room || !room.battleActive || !room.players[playerIdx]) return false;
-  const botId = room.players[playerIdx];
-  const botPlayer = players[botId];
-  if (!botPlayer || !botPlayer.isBot || !botPlayer.bot) return false;
-  const random = typeof randomValue === 'number' ? randomValue : Math.random();
-  if (random > 0.24) return false;
-  const sentAt = Number(now) || Date.now();
-  if (sentAt - (Number(botPlayer.lastStickerAt) || 0) < BOT_STICKER_COOLDOWN_MS) return false;
-  const choices = botStickerChoices(context);
-  const choiceIndex = Math.min(choices.length - 1, Math.floor(random * choices.length / 0.24));
-  botPlayer.lastStickerAt = sentAt;
-  broadcast(room, { type: 'sticker', playerIdx: playerIdx, stickerId: choices[choiceIndex] });
-  return true;
-}
-
 function handleCorrect(room, player, opponent, playerIdx, timeTaken) {
   player.correct++;
   player.streak++;
@@ -1047,8 +1004,6 @@ function handleCorrect(room, player, opponent, playerIdx, timeTaken) {
     damage: actualDamage,
     bonusMsg: bonusMsg
   });
-  maybeSendBotSticker(room, playerIdx, 'correct');
-  if (actualDamage >= 20) maybeSendBotSticker(room, 1 - playerIdx, 'bigHit');
 }
 
 function handleWrong(room, player, playerIdx) {
@@ -1078,7 +1033,6 @@ function handleWrong(room, player, playerIdx) {
     answer: room.currentQuestion.answer,
     damage: 5
   });
-  maybeSendBotSticker(room, playerIdx, 'wrong');
 }
 
 function handleTimeout(room) {
@@ -1115,7 +1069,6 @@ function handleTimeout(room) {
     answer: room.currentQuestion.answer,
     damage: 8
   });
-  maybeSendBotSticker(room, room.currentPlayer, 'timeout');
   broadcast(room, { type: 'stateSync', players: room.gameState.players });
   finishQuestion(room);
 
@@ -1346,7 +1299,6 @@ function handleSprintAnswer(room, playerId, answer) {
     answer: question.answer,
     sprint: true
   });
-  maybeSendBotSticker(room, playerIdx, isCorrect ? 'correct' : 'wrong');
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
   finishSprintQuestion(room, playerIdx);
@@ -1374,7 +1326,6 @@ function handleSprintTimeout(room, playerIdx) {
     answer: question.answer,
     sprint: true
   });
-  maybeSendBotSticker(room, playerIdx, 'timeout');
 
   broadcast(room, { type: 'stateSync', players: room.gameState.players, sprint: true });
   finishSprintQuestion(room, playerIdx);
@@ -2046,7 +1997,6 @@ wss.on('connection', async function connection(ws, req) {
       accountId: account.accountId,
       roomCode: null,
       playerIdx: 0,
-      lastStickerAt: 0,
       lastFallbackBotProfileId: null
     };
   }
@@ -2170,12 +2120,6 @@ wss.on('connection', async function connection(ws, req) {
         break;
       }
 
-      case 'sendSticker': {
-        const room = rooms[players[playerId].roomCode];
-        if (room) handleSticker(room, playerId, message.stickerId);
-        break;
-      }
-
       case 'rematch': {
         const room = rooms[players[playerId].roomCode];
         if (room && room.matchType === 'quick') {
@@ -2225,13 +2169,7 @@ module.exports = {
   __test: {
     CARD_POOL: CARD_POOL,
     TIME_FREEZE_SECONDS: TIME_FREEZE_SECONDS,
-    STICKER_IDS: STICKER_IDS,
-    STICKER_COOLDOWN_MS: STICKER_COOLDOWN_MS,
-    BOT_STICKER_COOLDOWN_MS: BOT_STICKER_COOLDOWN_MS,
     players: players,
-    handleSticker: handleSticker,
-    botStickerChoices: botStickerChoices,
-    maybeSendBotSticker: maybeSendBotSticker,
     handleCardActivate: handleCardActivate,
     handleCorrect: handleCorrect,
     handleWrong: handleWrong,
