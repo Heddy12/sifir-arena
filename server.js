@@ -46,7 +46,7 @@ const MULTIPLAYER_TURN_SECONDS = 6;
 const STICKER_COOLDOWN_MS = Math.max(100, Number(process.env.STICKER_COOLDOWN_MS) || 5000);
 const BOT_STICKER_COOLDOWN_MS = Math.max(STICKER_COOLDOWN_MS, Number(process.env.BOT_STICKER_COOLDOWN_MS) || 10000);
 const STICKER_IDS = new Set(['happy', 'angry', 'funny', 'wow', 'nice', 'goodGame', 'oops', 'fire']);
-const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 8000);
+const QUICK_MATCH_WAIT_MS = Math.max(10, Number(process.env.QUICK_MATCH_WAIT_MS) || 5000);
 const QUICK_MATCH_START_DELAY_MS = Math.max(10, Number(process.env.QUICK_MATCH_START_DELAY_MS) || 700);
 const RANKED_RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RANKED_RECONNECT_GRACE_MS) || 30000);
 const QUICK_MATCH_SETTINGS = Object.freeze({ timer: MULTIPLAYER_TURN_SECONDS, sifir: 0, difficulty: 'random', gameMode: 'ffa', sprintTime: SPRINT_DURATION });
@@ -599,25 +599,26 @@ function createBotOpponent(profile) {
   return botId;
 }
 
-async function fallbackQuickMatchToBot(playerId) {
-  const entry = removeQuickMatchEntry(playerId);
+function chooseStandaloneBot(player) {
+  const candidates = botCatalog.BOT_PROFILES.filter(function (bot) {
+    return bot.profileId !== player.lastFallbackBotProfileId;
+  });
+  const profile = candidates[Math.floor(Math.random() * candidates.length)] || botCatalog.chooseBot();
+  player.lastFallbackBotProfileId = profile.profileId;
+  return profile;
+}
+
+async function startQuickMatchBot(entry) {
+  if (!entry) return;
+  const playerId = entry.playerId;
   const player = players[playerId];
-  if (!entry || !player || player.roomCode) return;
-  let rotation = entry.rotation || null;
-  const rotationMode = rotationModeForGame(entry.gameMode);
-  if (!rotation || !rotation.active || !rotation.bot) {
-    await beginPlayerBotRotations([{
-      playerId: playerId,
-      profileId: player.profileId,
-      isBot: false
-    }], rotationMode);
-    rotation = await claimPlayerBotRotation(player, rotationMode);
-  }
+  if (!player || player.roomCode) return;
+  const rotation = entry.rotation && entry.rotation.active && entry.rotation.bot ? entry.rotation : null;
   const profile = rotation && rotation.bot
     ? botCatalog.ROTATION_BOTS.find(function (bot) { return bot.profileId === rotation.bot.profileId; })
-    : null;
+    : chooseStandaloneBot(player);
   if (!profile) {
-    sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to select the next rotation opponent.' });
+    sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to select an arena opponent.' });
     return;
   }
   if (!players[playerId] || players[playerId].roomCode) return;
@@ -627,6 +628,32 @@ async function fallbackQuickMatchToBot(playerId) {
     delete players[botId];
     sendToPlayer(playerId, { type: 'quickMatchError', error: 'Unable to start Quick Match.' });
   }
+}
+
+async function resolveQuickMatch(playerId) {
+  const entry = removeQuickMatchEntry(playerId);
+  if (!entry || !players[playerId] || players[playerId].roomCode) return;
+
+  if (!entry.rotation) {
+    const candidates = quickMatchQueue.filter(function (candidate) {
+      const queuedPlayer = players[candidate.playerId];
+      return candidate.playerId !== playerId && candidate.gameMode === entry.gameMode &&
+        !candidate.rotation && queuedPlayer && !queuedPlayer.roomCode;
+    }).sort(function (a, b) {
+      const rankDifference = Math.abs(Number(a.rp || 600) - Number(entry.rp || 600)) -
+        Math.abs(Number(b.rp || 600) - Number(entry.rp || 600));
+      return rankDifference || a.queuedAt - b.queuedAt;
+    });
+    if (candidates[0]) {
+      const opponentEntry = removeQuickMatchEntry(candidates[0].playerId);
+      if (opponentEntry && players[opponentEntry.playerId] && !players[opponentEntry.playerId].roomCode) {
+        startQuickMatchRoom(entry.playerId, opponentEntry.playerId, null, entry.gameMode);
+        return;
+      }
+    }
+  }
+
+  await startQuickMatchBot(entry);
 }
 
 async function requestQuickMatch(playerId, requestedMode) {
@@ -649,7 +676,8 @@ async function requestQuickMatch(playerId, requestedMode) {
       cancelQuickMatch(playerId, false);
       return requestQuickMatch(playerId, gameMode);
     }
-    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: existingEntry.rotation ? 350 : QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(existingEntry.rotation) });
+    const remainingWait = Math.max(10, QUICK_MATCH_WAIT_MS - (Date.now() - existingEntry.queuedAt));
+    sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: remainingWait, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(existingEntry.rotation) });
     return;
   }
 
@@ -665,30 +693,17 @@ async function requestQuickMatch(playerId, requestedMode) {
   if (!players[playerId] || players[playerId].roomCode) return;
   if (rotation && rotation.active && rotation.bot) {
     const rotationEntry = { playerId: playerId, gameMode: gameMode, rp: playerRp, queuedAt: Date.now(), timeout: null, rotation: rotation };
-    rotationEntry.timeout = setTimeout(function () { fallbackQuickMatchToBot(playerId); }, 300);
+    rotationEntry.timeout = setTimeout(function () { resolveQuickMatch(playerId); }, QUICK_MATCH_WAIT_MS);
     quickMatchQueue.push(rotationEntry);
     sendToPlayer(playerId, {
-      type: 'quickMatchSearching', waitMs: 300, gameMode: gameMode,
+      type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode,
       settings: rankedQuickMatchSettings(gameMode), rotation: publicRotationState(rotation)
     });
     return;
   }
-  const opponentIndex = quickMatchQueue.findIndex(function (entry) {
-    if (entry.playerId === playerId || entry.gameMode !== gameMode || entry.rotation) return false;
-    const elapsed = Date.now() - entry.queuedAt;
-    const range = elapsed < 4000 ? 150 : 300;
-    return Math.abs(Number(entry.rp || 600) - playerRp) <= range;
-  });
-  const opponentEntry = opponentIndex === -1 ? null : quickMatchQueue.splice(opponentIndex, 1)[0];
-
-  if (opponentEntry) {
-    clearTimeout(opponentEntry.timeout);
-    startQuickMatchRoom(opponentEntry.playerId, playerId, null, gameMode);
-    return;
-  }
 
   const entry = { playerId: playerId, gameMode: gameMode, rp: playerRp, queuedAt: Date.now(), timeout: null };
-  entry.timeout = setTimeout(function () { fallbackQuickMatchToBot(playerId); }, QUICK_MATCH_WAIT_MS);
+  entry.timeout = setTimeout(function () { resolveQuickMatch(playerId); }, QUICK_MATCH_WAIT_MS);
   quickMatchQueue.push(entry);
   sendToPlayer(playerId, { type: 'quickMatchSearching', waitMs: QUICK_MATCH_WAIT_MS, gameMode: gameMode, settings: rankedQuickMatchSettings(gameMode) });
 }
@@ -2031,7 +2046,8 @@ wss.on('connection', async function connection(ws, req) {
       accountId: account.accountId,
       roomCode: null,
       playerIdx: 0,
-      lastStickerAt: 0
+      lastStickerAt: 0,
+      lastFallbackBotProfileId: null
     };
   }
 

@@ -78,9 +78,11 @@ function run() {
   room.gameMode = 'solo';
   assert.strictEqual(game.handleSticker(room, 'sticker_p0', 'happy', 140000), false, 'stickers should not be available in Solo');
 
-  const asset = path.join(__dirname, 'images', 'stickers', 'hero-reactions.png');
-  assert.ok(fs.existsSync(asset), 'hero sticker artwork should be bundled with the game');
-  assert.ok(fs.statSync(asset).size > 100000, 'hero sticker artwork should not be empty');
+  Array.from(game.STICKER_IDS).forEach(function (stickerId) {
+    const asset = path.join(__dirname, 'images', 'stickers', stickerId + '.png');
+    assert.ok(fs.existsSync(asset), stickerId + ' sticker artwork should be bundled separately');
+    assert.ok(fs.statSync(asset).size > 50000, stickerId + ' sticker artwork should not be empty');
+  });
 
   cleanup();
   console.log('sticker system tests passed');

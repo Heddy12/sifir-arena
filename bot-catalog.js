@@ -40,7 +40,10 @@ const RETIRED_BOTS = [
 ];
 
 const BOT_PROFILES = MATCHMAKING_BOTS.concat(LEAGUE_BOTS);
-const ROTATION_BOTS = BOT_PROFILES.slice();
+// A completed real-player match starts a short five-opponent bot circuit.
+// Keep these personas strong, distinct and stable so an unfinished circuit can
+// safely resume after a reconnect or deploy.
+const ROTATION_BOTS = LEAGUE_BOTS.slice(0, 5);
 const BOT_NAME_KEYS = new Set(BOT_PROFILES.concat(RETIRED_BOTS).map(function (bot) { return bot.name.toLowerCase(); }));
 
 function randomBetween(min, max, random) {

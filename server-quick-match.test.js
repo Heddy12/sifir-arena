@@ -78,7 +78,13 @@ async function run() {
     const foundB = waitForMessage(playerB, 'quickMatchFound');
     const startA = waitForMessage(playerA, 'gameStart');
     const startB = waitForMessage(playerB, 'gameStart');
+    let matchedBeforeSearchWindow = false;
+    function detectPrematureMatch(raw) { try { if (JSON.parse(raw).type === 'quickMatchFound') matchedBeforeSearchWindow = true; } catch (error) {} }
+    playerA.on('message', detectPrematureMatch);
     playerB.send(JSON.stringify({ type: 'quickMatch' }));
+    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+    assert.strictEqual(matchedBeforeSearchWindow, false, 'real players must remain in search before matchmaking resolves');
+    playerA.off('message', detectPrematureMatch);
     const paired = await Promise.all([foundA, foundB]);
     assert.strictEqual(paired[0].opponentName, 'Quick_Bravo');
     assert.strictEqual(paired[1].opponentName, 'Quick_Alpha');
@@ -150,8 +156,7 @@ async function run() {
     assert.strictEqual(botGame.gameMode, 'ffa');
     assert.strictEqual(botGame.matchType, 'quick');
     assert.strictEqual(botGame.opponentIsBot, true);
-    assert.strictEqual(botGame.rotation.position, 1, 'a direct bot fallback must start a persisted rotation');
-    assert.strictEqual(botGame.rotation.total, botCatalog.ROTATION_BOTS.length);
+    assert.strictEqual(botGame.rotation, null, 'a no-player bot fallback should return to real-player search after the match');
     const botTurn = waitForMessage(playerC, 'newTurn');
     playerC.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await botTurn).timer, 6);
@@ -185,8 +190,7 @@ async function run() {
     const sprintGame = await sprintStart;
     assert.strictEqual(sprintGame.gameMode, 'sprint');
     assert.strictEqual(sprintGame.sprint, true);
-    assert.strictEqual(sprintGame.rotation.position, 1, 'Sprint must maintain its own bot rotation');
-    assert.strictEqual(sprintGame.rotation.total, botCatalog.ROTATION_BOTS.length);
+    assert.strictEqual(sprintGame.rotation, null, 'Sprint bot fallback should not force a long bot circuit');
     const sprintFirstQuestion = waitForMessage(playerD, 'newTurn');
     playerD.send(JSON.stringify({ type: 'battleReady' }));
     assert.strictEqual((await sprintFirstQuestion).sprint, true);

@@ -177,15 +177,15 @@ header .subtitle{font-size:0.72rem;color:var(--text-dim);letter-spacing:3px;text
 .sticker-picker.show{display:grid;animation:stickerPickerIn .16s ease-out;}
 .sticker-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border:1px solid transparent;border-radius:10px;background:rgba(255,255,255,.035);color:var(--text-dim);font:inherit;font-size:.48rem;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;}
 .sticker-option:hover,.sticker-option:focus-visible{outline:none;border-color:var(--neon-yellow);background:rgba(255,230,0,.09);color:var(--neon-yellow);transform:translateY(-2px);}
-.sticker-art{display:block;width:54px;aspect-ratio:1;background-image:url('/images/stickers/hero-reactions.png');background-repeat:no-repeat;background-size:400% 200%;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 3px 9px rgba(0,0,0,.45);}
-.sticker-art[data-sticker="happy"]{background-position:0% 0%;}
-.sticker-art[data-sticker="angry"]{background-position:33.333% 0%;}
-.sticker-art[data-sticker="funny"]{background-position:66.667% 0%;}
-.sticker-art[data-sticker="wow"]{background-position:100% 0%;}
-.sticker-art[data-sticker="nice"]{background-position:0% 100%;}
-.sticker-art[data-sticker="goodGame"]{background-position:33.333% 100%;}
-.sticker-art[data-sticker="oops"]{background-position:66.667% 100%;}
-.sticker-art[data-sticker="fire"]{background-position:100% 100%;}
+.sticker-art{display:block;width:54px;aspect-ratio:1;background-repeat:no-repeat;background-size:contain;background-position:center;border-radius:9px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.5));}
+.sticker-art[data-sticker="happy"]{background-image:url('/images/stickers/happy.png');}
+.sticker-art[data-sticker="angry"]{background-image:url('/images/stickers/angry.png');}
+.sticker-art[data-sticker="funny"]{background-image:url('/images/stickers/funny.png');}
+.sticker-art[data-sticker="wow"]{background-image:url('/images/stickers/wow.png');}
+.sticker-art[data-sticker="nice"]{background-image:url('/images/stickers/nice.png');}
+.sticker-art[data-sticker="goodGame"]{background-image:url('/images/stickers/goodGame.png');}
+.sticker-art[data-sticker="oops"]{background-image:url('/images/stickers/oops.png');}
+.sticker-art[data-sticker="fire"]{background-image:url('/images/stickers/fire.png');}
 .sticker-bubble{display:none;position:absolute;z-index:180;top:10px;width:92px;padding:5px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(203,225,255,.9));border:2px solid var(--neon-yellow);border-radius:18px;box-shadow:0 10px 24px rgba(0,0,0,.55),0 0 20px rgba(255,230,0,.42);pointer-events:none;}
 .fighter-card.left .sticker-bubble{right:8px;}
 .fighter-card.right .sticker-bubble{left:8px;}
@@ -903,7 +903,7 @@ body.auth-pending .info-toggle,body.auth-required .info-toggle,body.auth-pending
     </div>
     <div class="ranked-status" id="ranked-status">Ranked - results count toward the season leaderboard.</div>
     <button class="connect-btn btn-quick-match" id="btn-quick-match" disabled>&#9876; Quick Match</button>
-    <div class="quick-match-note" id="quick-match-note">Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 6s.</div>
+    <div class="quick-match-note" id="quick-match-note">Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching for another player. Ranked: All Tables · Random · 6s.</div>
     <button class="connect-btn btn-create" id="btn-create" disabled>⚔ Create Room</button>
     <button class="connect-btn btn-solo-start" id="btn-solo-start" style="display:none;">⚔ Start Quest</button>
     <div class="solo-high-score" id="solo-high-score"></div>
@@ -1135,7 +1135,7 @@ var STATE = {
   reconnectAttempts: 0,
   quickMatchSearching: false,
   quickMatchStartedAt: 0,
-  quickMatchWaitMs: 8000,
+  quickMatchWaitMs: 5000,
   quickMatchInterval: null,
   matchType: null,
   opponentIsBot: false,
@@ -2515,8 +2515,8 @@ function applyModeState(mode) {
   document.getElementById('btn-quick-match').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').style.display = supportsQuickMatch ? '' : 'none';
   document.getElementById('quick-match-note').textContent = mode === 'sprint'
-    ? 'Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 60s Sprint.'
-    : 'Search for a player for 8 seconds. Bot opponents rotate without repeats until the full arena roster is complete. Ranked: All Tables · Random · 6s.';
+    ? 'Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching again. Ranked: All Tables · Random · 60s Sprint.'
+    : 'Search for a real player for 5 seconds. After a real-player battle, face 5 different bots before searching again. Ranked: All Tables · Random · 6s.';
   document.getElementById('btn-create').style.display = isSolo ? 'none' : '';
   document.getElementById('btn-solo-start').style.display = isSolo ? '' : 'none';
   document.getElementById('btn-join').style.display = isSolo ? 'none' : '';
@@ -2681,7 +2681,7 @@ function stopQuickMatchClock() {
 function beginQuickMatchSearch(waitMs, rotation) {
   stopQuickMatchClock();
   STATE.quickMatchSearching = true;
-  STATE.quickMatchWaitMs = Number(waitMs) || 8000;
+  STATE.quickMatchWaitMs = Number(waitMs) || 5000;
   STATE.quickMatchStartedAt = Date.now();
   var card = document.getElementById('connect-card');
   card.classList.remove('waiting');
@@ -2696,7 +2696,7 @@ function beginQuickMatchSearch(waitMs, rotation) {
   function updateSearchTime() {
     var remaining = Math.max(0, STATE.quickMatchWaitMs - (Date.now() - STATE.quickMatchStartedAt));
     document.getElementById('quick-match-countdown').textContent = rotation && rotation.active
-      ? 'Preparing opponent ' + rotation.position + ' of ' + rotation.total + '...'
+      ? 'Preparing bot opponent ' + rotation.position + ' of ' + rotation.total + '... ' + Math.ceil(remaining / 1000) + 's'
       : (remaining > 0 ? 'Searching for an available player... ' + Math.ceil(remaining / 1000) + 's' : 'Preparing an arena opponent...');
   }
   updateSearchTime();

@@ -182,10 +182,13 @@ function run() {
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
   assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
   assert.ok(loaded.html.includes("selectedMode === 'ffa' ? 6"), 'Multiplayer Create Room should always send a 6-second timer');
+  assert.ok(loaded.html.includes('Search for a real player for 5 seconds.'), 'Quick Match should explain its five-second real-player search');
+  assert.strictEqual(loaded.html.includes('Search for a player for 8 seconds.'), false, 'legacy eight-second search copy should be removed');
   assert.ok(loaded.html.includes('id="sticker-picker"'), 'battle screen should include the sticker picker');
   assert.ok(loaded.html.includes("type: 'sendSticker'"), 'client should send stickers through WebSocket');
   assert.ok(loaded.html.includes("case 'sticker':"), 'client should display stickers received in real time');
-  assert.ok(loaded.html.includes("/images/stickers/hero-reactions.png"), 'sticker UI should use the supplied hero artwork');
+  assert.ok(loaded.html.includes("/images/stickers/happy.png"), 'sticker UI should use individually cropped hero artwork');
+  assert.strictEqual(loaded.html.includes('background-size:400% 200%'), false, 'sticker crops must not rely on an incorrect sprite-sheet ratio');
   console.log('client audio tests passed');
 }
 
