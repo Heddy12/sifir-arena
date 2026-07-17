@@ -119,6 +119,16 @@ function run() {
   Sound.tone(440, 0.1);
   assert.strictEqual(loaded.audio.oscillators, beforeEnabledSfx + 1);
   assert.strictEqual(loaded.storage.get('sifirSfxEnabled'), '1');
+  const beforeStickerSfx = loaded.audio.oscillators;
+  Sound.sticker('happy');
+  assert.ok(loaded.audio.oscillators >= beforeStickerSfx + 3, 'Happy sticker should play its own short sound effect');
+  Sound.sticker('angry');
+  Sound.sticker('funny');
+  Sound.sticker('wow');
+  Sound.sticker('nice');
+  Sound.sticker('goodGame');
+  Sound.sticker('oops');
+  Sound.sticker('fire');
   Sound.playMenuMusic();
   assert.strictEqual(loaded.audio.mediaPlayers.length, 1, 'menu music should create one reusable audio player');
   assert.strictEqual(loaded.audio.mediaPlayers[0].src, '/audio/menu-go.mp3');
@@ -172,6 +182,10 @@ function run() {
   assert.ok(loaded.html.includes("type: 'nextQuickMatch'"), 'client should request the next rotation opponent');
   assert.ok(loaded.html.includes('Opponent Rotation'), 'client should show rotation progress');
   assert.ok(loaded.html.includes("selectedMode === 'ffa' ? 6"), 'Multiplayer Create Room should always send a 6-second timer');
+  assert.ok(loaded.html.includes('id="sticker-picker"'), 'battle screen should include the sticker picker');
+  assert.ok(loaded.html.includes("type: 'sendSticker'"), 'client should send stickers through WebSocket');
+  assert.ok(loaded.html.includes("case 'sticker':"), 'client should display stickers received in real time');
+  assert.ok(loaded.html.includes("/images/stickers/hero-reactions.png"), 'sticker UI should use the supplied hero artwork');
   console.log('client audio tests passed');
 }
 

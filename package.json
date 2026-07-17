@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node bot-catalog.test.js && node bot-league.test.js && node leaderboard-store.test.js && node magic-cards.test.js && node server-auth.test.js && node server-quick-match.test.js && node client-audio.test.js && node client-arena.test.js"
+    "test": "node bot-catalog.test.js && node bot-league.test.js && node leaderboard-store.test.js && node magic-cards.test.js && node sticker-system.test.js && node server-auth.test.js && node server-quick-match.test.js && node client-audio.test.js && node client-arena.test.js"
   },
   "dependencies": {
     "nodemailer": "^9.0.3",
