@@ -21,6 +21,8 @@ async function run() {
   assert.strictEqual(await store.initialize(), true);
   assert.strictEqual(await store.getPlayerProfile('SifirStorm76', null), null);
   assert.strictEqual(await store.getPlayerProfile('KuasaNombor39', null), null);
+  assert.strictEqual(await store.getPlayerProfile('PixelPadi47', null), null);
+  assert.strictEqual(await store.getPlayerProfile('RotiCanaiX24', null), null);
   const initialMultiplayerLadder = await store.getRankedLadder('multiplayer', 10);
   assert.strictEqual(initialMultiplayerLadder.entries[3].name, 'TitanSifir95');
   assert.strictEqual(initialMultiplayerLadder.entries[3].rp % 2, 1);

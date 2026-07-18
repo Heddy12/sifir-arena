@@ -1,9 +1,7 @@
 'use strict';
 
 const MATCHMAKING_BOTS = [
-  { profileId: 'arena_bot_pixel_padi_47', name: 'PixelPadi47', level: 'low', accuracyMin: 0.48, accuracyMax: 0.58, responseMin: 0.55, responseMax: 0.92, cardChance: 0.08 },
   { profileId: 'arena_bot_chill_panda_81', name: 'ChillPanda81', level: 'low', accuracyMin: 0.48, accuracyMax: 0.58, responseMin: 0.55, responseMax: 0.92, cardChance: 0.08 },
-  { profileId: 'arena_bot_roti_canaix_24', name: 'RotiCanaiX24', level: 'low', accuracyMin: 0.48, accuracyMax: 0.58, responseMin: 0.55, responseMax: 0.92, cardChance: 0.08 },
   { profileId: 'arena_bot_neon_rimba_63', name: 'NeonRimba63', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
   { profileId: 'arena_bot_awan_byte_52', name: 'AwanByte52', level: 'medium', accuracyMin: 0.70, accuracyMax: 0.84, responseMin: 0.30, responseMax: 0.65, cardChance: 0.25 },
   { profileId: 'arena_bot_zero_lag_zara_91', name: 'ZeroLagZara91', level: 'smart', accuracyMin: 0.90, accuracyMax: 0.97, responseMin: 0.15, responseMax: 0.40, cardChance: 0.55 },
@@ -36,7 +34,9 @@ const LEAGUE_BOTS = [
 
 const RETIRED_BOTS = [
   { profileId: 'arena_bot_sifir_storm_76', name: 'SifirStorm76' },
-  { profileId: 'arena_bot_kuasa_nombor_39', name: 'KuasaNombor39' }
+  { profileId: 'arena_bot_kuasa_nombor_39', name: 'KuasaNombor39' },
+  { profileId: 'arena_bot_pixel_padi_47', name: 'PixelPadi47' },
+  { profileId: 'arena_bot_roti_canaix_24', name: 'RotiCanaiX24' }
 ];
 
 const BOT_PROFILES = MATCHMAKING_BOTS.concat(LEAGUE_BOTS);
